@@ -2,10 +2,14 @@ name: CI/CD Pipeline
 
 on:
   push:
+    branches: [ dev ]
+  pull_request:
     branches: [ main ]
+    types: [ closed ]
 
 jobs:
   build-and-test:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: [self-hosted, Linux, X64, k8s]
     steps:
       - name: Checkout
@@ -67,6 +71,7 @@ jobs:
   deploy-dev:
     runs-on: [self-hosted, Linux, X64, k8s]
     needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -77,6 +82,7 @@ jobs:
   deploy-prod:
     runs-on: [self-hosted, Linux, X64, k8s]
     needs: build-and-push
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     environment: prod
     steps:
       - name: Checkout

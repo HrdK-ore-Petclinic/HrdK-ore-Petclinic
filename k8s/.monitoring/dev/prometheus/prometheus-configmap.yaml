@@ -22,25 +22,21 @@ data:
                 - dev
 
         relabel_configs:
-          # Only scrape annotated pods
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
-            regex: "true"
+            regex: .+
 
-          # Metrics path
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
             action: replace
             target_label: __metrics_path__
             regex: (.+)
 
-          # Metrics port
           - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
             action: replace
             regex: ([^:]+)(?::\d+)?;(\d+)
             replacement: $1:$2
             target_label: __address__
 
-          # Import labels
           - action: labelmap
             regex: __meta_kubernetes_pod_label_(.+)
 
@@ -52,7 +48,7 @@ data:
 
 
       # ==========================================
-      # Kubelet / cAdvisor (Container CPU / RAM)
+      # Kubelet / cAdvisor (CPU / RAM)
       # ==========================================
       - job_name: 'kubernetes-nodes-cadvisor'
 
@@ -80,28 +76,20 @@ data:
 
 
       # ==========================================
-      # Node Exporter (Node CPU / RAM / Disk)
+      # Node Exporter (FIXED)
       # ==========================================
       - job_name: 'node-exporter'
 
-        kubernetes_sd_configs:
-          - role: endpoints
-
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_service_name]
-            action: keep
-            regex: node-exporter
+        static_configs:
+          - targets:
+              - node-exporter.monitoring-dev.svc.cluster.local:9100
 
 
       # ==========================================
-      # kube-state-metrics (Cluster State)
+      # kube-state-metrics (FIXED)
       # ==========================================
       - job_name: 'kube-state-metrics'
 
-        kubernetes_sd_configs:
-          - role: endpoints
-
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_service_name]
-            action: keep
-            regex: kube-state-metrics
+        static_configs:
+          - targets:
+              - kube-state-metrics.monitoring-dev.svc.cluster.local:8080

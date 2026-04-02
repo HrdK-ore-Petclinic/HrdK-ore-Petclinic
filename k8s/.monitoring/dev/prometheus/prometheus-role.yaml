@@ -1,13 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRole","metadata":{"annotations":{},"creationTimestamp":"2026-04-01T23:06:53Z","name":"prometheus","resourceVersion":"3220708","uid":"49c0066b-9752-4d4b-93a5-da56fcc99790"},"rules":[{"apiGroups":[""],"resources":["nodes","nodes/proxy","nodes/metrics"],"verbs":["get","list","watch"]}]}
-  creationTimestamp: "2026-04-01T23:06:53Z"
   name: prometheus
-  resourceVersion: "3229122"
-  uid: 49c0066b-9752-4d4b-93a5-da56fcc99790
 rules:
 - apiGroups: [""]
   resources:

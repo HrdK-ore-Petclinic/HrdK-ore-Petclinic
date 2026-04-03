@@ -1,0 +1,35 @@
+name: (DEV) Deploy admin-server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-admin:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 🔥 Build Image (Buildpacks)
+      - name: Build Admin Server Image
+        run: |
+          cd spring-petclinic-admin-server
+          mvn clean spring-boot:build-image \
+            -Dspring-boot.build-image.imageName=ross1832/spring-petclinic-admin-server:latest
+
+      # 🔥 Login Docker Hub
+      - name: Docker Login
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # 🔥 Push Image
+      - name: Push Image
+        run: |
+          docker push ross1832/spring-petclinic-admin-server:latest
+
+      # 🔥 Deploy to Kubernetes
+      - name: Deploy Admin Server
+        run: |
+          kubectl apply -f k8s/dev/admin-server-deployment.yaml -n dev
+          kubectl rollout restart deployment admin-server -n dev

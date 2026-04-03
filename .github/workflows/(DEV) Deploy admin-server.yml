@@ -5,7 +5,7 @@ on:
 
 jobs:
   deploy-admin:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64, k8s]
 
     steps:
       - name: Checkout repo
@@ -31,5 +31,5 @@ jobs:
       # 🔥 Deploy to Kubernetes
       - name: Deploy Admin Server
         run: |
-          kubectl apply -f k8s/dev/admin-server-deployment.yaml -n dev
+          kubectl apply -f k8s/dev/admin-server/ -n dev
           kubectl rollout restart deployment admin-server -n dev

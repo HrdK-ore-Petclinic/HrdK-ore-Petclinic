@@ -31,5 +31,5 @@ jobs:
       # 🔥 Deploy to Kubernetes
       - name: Deploy Admin Server
         run: |
-          kubectl apply -f k8s/dev/admin-server/ -n dev
+          # - not working kubectl apply -f k8s/dev/admin-server/ -n dev
           kubectl rollout restart deployment admin-server -n dev

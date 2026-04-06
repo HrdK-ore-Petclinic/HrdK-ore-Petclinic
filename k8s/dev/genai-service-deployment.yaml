@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: genai-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8084"
     spec:
       affinity:
         podAntiAffinity:
@@ -33,3 +37,10 @@ spec:
               value: docker
           ports:
             - containerPort: 8084
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

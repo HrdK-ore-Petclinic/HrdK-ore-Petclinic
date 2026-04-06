@@ -2,105 +2,159 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ dev ]
+    branches: [dev]
   pull_request:
-    branches: [ main ]
-    types: [ closed ]
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Which service to build and deploy?"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - spring-petclinic-admin-server
+          - spring-petclinic-api-gateway
+          - spring-petclinic-config-server
+          - spring-petclinic-customers-service
+          - spring-petclinic-discovery-server
+          - spring-petclinic-genai-service
+          - spring-petclinic-vets-service
+          - spring-petclinic-visits-service
 
 jobs:
   build-and-test:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: [self-hosted, Linux, X64, k8s]
     steps:
-      - name: Check source branch
+      - name: Check source branch (PR only)
         if: github.event_name == 'pull_request'
         run: |
           if [ "${{ github.head_ref }}" != "dev" ]; then
-            echo "ERROR: Only dev branch can be merged into main!"
+            echo "ERROR: Only the 'dev' branch can be merged into 'main'!"
             exit 1
           fi
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: "temurin"
           cache: maven
 
       - name: Run tests
         run: mvn test --batch-mode -DskipTests
 
-  build-and-push:
-    runs-on: [self-hosted, Linux, X64, k8s]
+  detect-changes:
     needs: build-and-test
-    permissions:
-      contents: read
-      packages: write
+    runs-on: [self-hosted, Linux, X64, k8s]
+    outputs:
+      services: ${{ steps.set-services.outputs.services }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          fetch-depth: 2
+
+      - name: Determine which services to build
+        id: set-services
+        run: |
+          ALL_SERVICES='["spring-petclinic-admin-server","spring-petclinic-api-gateway","spring-petclinic-config-server","spring-petclinic-customers-service","spring-petclinic-discovery-server","spring-petclinic-genai-service","spring-petclinic-vets-service","spring-petclinic-visits-service"]'
+
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "${{ inputs.service }}" == "all" ]; then
+              echo "services=$ALL_SERVICES" >> $GITHUB_OUTPUT
+            else
+              echo "services=[\"${{ inputs.service }}\"]" >> $GITHUB_OUTPUT
+            fi
+
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "services=$ALL_SERVICES" >> $GITHUB_OUTPUT
+
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD \
+              | grep -oP 'spring-petclinic-[^/]+' \
+              | sort -u \
+              | jq -R . | jq -sc .)
+
+            if [ "$CHANGED" == "[]" ] || [ -z "$CHANGED" ]; then
+              echo "services=[]" >> $GITHUB_OUTPUT
+            else
+              echo "services=$CHANGED" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  build-and-push:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    runs-on: [self-hosted, Linux, X64, k8s]
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
           cache: maven
 
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Clean up before build
-        run: docker image prune -a -f
-        continue-on-error: true
-
-      - name: Build and push images
+      - name: Build and push → ${{ matrix.service }}
         run: |
-          for service in \
-            spring-petclinic-config-server \
-            spring-petclinic-discovery-server \
-            spring-petclinic-admin-server \
-            spring-petclinic-customers-service \
-            spring-petclinic-vets-service \
-            spring-petclinic-visits-service \
-            spring-petclinic-genai-service \
-            spring-petclinic-api-gateway; do
+          mvn spring-boot:build-image \
+            -pl ${{ matrix.service }} \
+            -Dspring-boot.build-image.publish=true \
+            -Dspring-boot.build-image.imageName=ross1832/${{ matrix.service }}:latest \
+            --batch-mode \
+            -DskipTests
 
-            mvn spring-boot:build-image \
-              -pl $service \
-              -Dspring-boot.build-image.publish=true \
-              -Dspring-boot.build-image.imageName=ross1832/$service:latest \
-              --batch-mode \
-              -DskipTests
-
-            docker image rm ross1832/$service:latest || true
-          done
+      - name: Clean up local image
+        run: docker image rm ross1832/${{ matrix.service }}:latest || true
 
   deploy-dev:
+    needs: [detect-changes, build-and-push]
     runs-on: [self-hosted, Linux, X64, k8s]
-    needs: build-and-push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+      fail-fast: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Deploy to dev
+      - uses: actions/checkout@v4
+
+      - name: Deploy ${{ matrix.service }} to dev
         run: |
-          kubectl apply -f k8s/dev/ -n dev
+          SHORT=$(echo "${{ matrix.service }}" | sed 's/spring-petclinic-//')
+          kubectl apply -f k8s/dev/${SHORT}-deployment.yaml -n dev
+          kubectl apply -f k8s/dev/${SHORT}-service.yaml -n dev
+          kubectl rollout restart deployment/${SHORT} -n dev
+          kubectl rollout status deployment/${SHORT} -n dev --timeout=180s
 
   deploy-prod:
-    runs-on: [self-hosted, Linux, X64, k8s]
     needs: build-and-push
+    runs-on: [self-hosted, Linux, X64, k8s]
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     environment: prod
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Deploy to prod
+      - uses: actions/checkout@v4
+
+      - name: Deploy all services to prod
         run: |
           kubectl apply -f k8s/prod/ -n prod
+          kubectl rollout restart deployment -n prod
+          kubectl rollout status deployment -n prod --timeout=300s

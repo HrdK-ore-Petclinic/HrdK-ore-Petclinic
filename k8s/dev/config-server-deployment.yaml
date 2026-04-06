@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: config-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8888"
     spec:
       affinity:
         podAntiAffinity:
@@ -28,3 +32,10 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8888
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

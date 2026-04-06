@@ -33,3 +33,10 @@ spec:
               value: docker
           ports:
             - containerPort: 9090
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

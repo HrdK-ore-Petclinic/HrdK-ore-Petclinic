@@ -21,3 +21,16 @@ target/
 generated/
 
 **/.DS_Store
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+terraform.tfvars
+terraform/*.log
+terraform/*.bak
+
+.terraform/
+.terraform.lock.hcl
+

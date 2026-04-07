@@ -25,18 +25,23 @@ on:
           - spring-petclinic-visits-service
 
 jobs:
+
+# ------------------------
+# 1. BUILD & TEST
+# ------------------------
   build-and-test:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: [self-hosted, Linux, X64, k8s]
+
     steps:
       - name: Check source branch (PR only)
         if: github.event_name == 'pull_request'
         run: |
           if [ "${{ github.head_ref }}" != "dev" ]; then
-            echo "ERROR: Only the 'dev' branch can be merged into 'main'!"
+            echo "ERROR: Only 'dev' can be merged into 'main'"
             exit 1
           fi
 
@@ -51,52 +56,79 @@ jobs:
       - name: Run tests
         run: mvn test --batch-mode -DskipTests
 
+
+# ------------------------
+# 2. DETECT CHANGES
+# ------------------------
   detect-changes:
     needs: build-and-test
     runs-on: [self-hosted, Linux, X64, k8s]
+
     outputs:
-      services: ${{ steps.set-services.outputs.services }}
+      services: ${{ steps.set.outputs.services }}
+      k8s_changed: ${{ steps.set.outputs.k8s_changed }}
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Determine which services to build
-        id: set-services
+      - name: Detect changes
+        id: set
         run: |
           ALL_SERVICES='["spring-petclinic-admin-server","spring-petclinic-api-gateway","spring-petclinic-config-server","spring-petclinic-customers-service","spring-petclinic-discovery-server","spring-petclinic-genai-service","spring-petclinic-vets-service","spring-petclinic-visits-service"]'
 
+          FILES=$(git diff --name-only HEAD~1 HEAD)
+
+          # --- Detect k8s-only changes ---
+          if echo "$FILES" | grep -q '^k8s/'; then
+            K8S=true
+          else
+            K8S=false
+          fi
+
+          # --- workflow_dispatch override ---
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             if [ "${{ inputs.service }}" == "all" ]; then
-              echo "services=$ALL_SERVICES" >> $GITHUB_OUTPUT
+              SERVICES=$ALL_SERVICES
             else
-              echo "services=[\"${{ inputs.service }}\"]" >> $GITHUB_OUTPUT
+              SERVICES="[\"${{ inputs.service }}\"]"
             fi
 
+          # --- PR merge: rebuild everything ---
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "services=$ALL_SERVICES" >> $GITHUB_OUTPUT
+            SERVICES=$ALL_SERVICES
 
+          # --- push: detect changed service folders ---
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD \
+            SERVICES=$(echo "$FILES" \
               | grep -oP 'spring-petclinic-[^/]+' \
               | sort -u \
               | jq -R . | jq -sc .)
 
-            if [ "$CHANGED" == "[]" ] || [ -z "$CHANGED" ]; then
-              echo "services=[]" >> $GITHUB_OUTPUT
-            else
-              echo "services=$CHANGED" >> $GITHUB_OUTPUT
+            # Guard: if grep found nothing, jq outputs "[]" — but double-check
+            if [ -z "$SERVICES" ]; then
+              SERVICES="[]"
             fi
           fi
 
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "k8s_changed=$K8S" >> $GITHUB_OUTPUT
+
+
+# ------------------------
+# 3. BUILD & PUSH
+# ------------------------
   build-and-push:
     needs: detect-changes
     if: needs.detect-changes.outputs.services != '[]'
     runs-on: [self-hosted, Linux, X64, k8s]
+
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
       fail-fast: false
+
     steps:
       - uses: actions/checkout@v4
 
@@ -106,34 +138,43 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Login to Docker Hub
+      - name: Login Docker
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push → ${{ matrix.service }}
+      - name: Build & Push
         run: |
           mvn spring-boot:build-image \
             -pl ${{ matrix.service }} \
             -Dspring-boot.build-image.publish=true \
             -Dspring-boot.build-image.imageName=ross1832/${{ matrix.service }}:latest \
-            --batch-mode \
-            -DskipTests
+            --batch-mode -DskipTests
 
-      - name: Clean up local image
+      - name: Cleanup
         run: docker image rm ross1832/${{ matrix.service }}:latest || true
 
+
+# ------------------------
+# 4. DEPLOY DEV (services)
+# ------------------------
   deploy-dev:
     needs: [detect-changes, build-and-push]
     runs-on: [self-hosted, Linux, X64, k8s]
+
     if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-      github.event_name == 'workflow_dispatch'
+      needs.detect-changes.outputs.services != '[]' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+        github.event_name == 'workflow_dispatch'
+      )
+
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
       fail-fast: false
+
     steps:
       - uses: actions/checkout@v4
 
@@ -145,15 +186,46 @@ jobs:
           kubectl rollout restart deployment/${SHORT} -n dev
           kubectl rollout status deployment/${SHORT} -n dev --timeout=180s
 
+
+# ------------------------
+# 4b. DEPLOY DEV (k8s-only)
+# ------------------------
+  deploy-dev-k8s:
+    needs: detect-changes
+    runs-on: [self-hosted, Linux, X64, k8s]
+
+    if: |
+      needs.detect-changes.outputs.k8s_changed == 'true' &&
+      needs.detect-changes.outputs.services == '[]' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+        github.event_name == 'workflow_dispatch'
+      )
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply k8s manifests only (no image change)
+        run: |
+          kubectl apply -f k8s/dev/ -n dev
+          kubectl get deployments -n dev -o name \
+            | xargs -n1 kubectl rollout restart -n dev
+          kubectl rollout status deployment -n dev --timeout=180s
+
+
+# ------------------------
+# 5. DEPLOY PROD
+# ------------------------
   deploy-prod:
     needs: build-and-push
     runs-on: [self-hosted, Linux, X64, k8s]
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     environment: prod
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy all services to prod
+      - name: Deploy prod
         run: |
           kubectl apply -f k8s/prod/ -n prod
           kubectl rollout restart deployment -n prod

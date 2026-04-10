@@ -4,7 +4,7 @@ metadata:
   name: genai-service
   namespace: dev
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: genai-service

@@ -4,6 +4,7 @@ metadata:
   name: api-dev-ingress
   namespace: dev
 spec:
+  ingressClassName: nginx   # fixed
   rules:
     - host: api-dev.local
       http:

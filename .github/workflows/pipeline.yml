@@ -146,14 +146,15 @@ jobs:
 
       - name: Build & Push
         run: |
+          SHORT_SHA=${GITHUB_SHA::7}
           mvn spring-boot:build-image \
             -pl ${{ matrix.service }} \
             -Dspring-boot.build-image.publish=true \
-            -Dspring-boot.build-image.imageName=ross1832/${{ matrix.service }}:latest \
+            -Dspring-boot.build-image.imageName=ross1832/${{ matrix.service }}:${SHORT_SHA} \
             --batch-mode -DskipTests
 
       - name: Cleanup
-        run: docker image rm ross1832/${{ matrix.service }}:latest || true
+        run: docker image rm ross1832/${{ matrix.service }}:${GITHUB_SHA::7} || true
 
 
 # ------------------------
@@ -181,9 +182,11 @@ jobs:
       - name: Deploy ${{ matrix.service }} to dev
         run: |
           SHORT=$(echo "${{ matrix.service }}" | sed 's/spring-petclinic-//')
+          SHORT_SHA=${GITHUB_SHA::7}
           kubectl apply -f k8s/dev/${SHORT}-deployment.yaml -n dev
           kubectl apply -f k8s/dev/${SHORT}-service.yaml -n dev
-          kubectl rollout restart deployment/${SHORT} -n dev
+          kubectl set image deployment/${SHORT} \
+            ${SHORT}=ross1832/${{ matrix.service }}:${SHORT_SHA} -n dev
           kubectl rollout status deployment/${SHORT} -n dev --timeout=180s
 
 
@@ -227,6 +230,13 @@ jobs:
 
       - name: Deploy prod
         run: |
+          SHORT_SHA=${GITHUB_SHA::7}
           kubectl apply -f k8s/prod/ -n prod
-          kubectl rollout restart deployment -n prod
+      
+          for SVC in admin-server api-gateway config-server customers-service \
+                      discovery-server genai-service vets-service visits-service; do
+            kubectl set image deployment/${SVC} \
+              ${SVC}=ross1832/spring-petclinic-${SVC}:${SHORT_SHA} -n prod
+          done
+      
           kubectl rollout status deployment -n prod --timeout=300s

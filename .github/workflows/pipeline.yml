@@ -54,7 +54,7 @@ jobs:
           cache: maven
 
       - name: Run tests
-        run: mvn test --batch-mode -DskipTests
+        run: mvn test --batch-mode
 
 
 # ------------------------

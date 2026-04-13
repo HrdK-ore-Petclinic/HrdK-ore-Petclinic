@@ -16,3 +16,4 @@ spec:
             name: grafana-service   # name was incorrect
             port:
               number: 3000
+              

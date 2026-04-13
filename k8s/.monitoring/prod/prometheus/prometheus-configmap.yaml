@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring-prod
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    scrape_configs:
+
+      # ==========================================
+      # Kubernetes Pods (Spring Boot / Apps)
+      # ==========================================
+      - job_name: 'kubernetes-pods'
+
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - prod
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: .+
+
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+
+      # ==========================================
+      # Kubelet / cAdvisor (CPU / RAM)
+      # ==========================================
+      - job_name: 'kubernetes-nodes-cadvisor'
+
+        scheme: https
+
+        kubernetes_sd_configs:
+          - role: node
+
+        tls_config:
+          insecure_skip_verify: true
+
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+
+      # ==========================================
+      # Node Exporter (FIXED)
+      # ==========================================
+      - job_name: 'node-exporter'
+
+        static_configs:
+          - targets:
+              - node-exporter.monitoring-dev.svc.cluster.local:9100 # node-exporter only needs one target, no prod node-exporter necessary!
+
+
+      # ==========================================
+      # kube-state-metrics (FIXED)
+      # ==========================================
+      - job_name: 'kube-state-metrics'
+
+        static_configs:
+          - targets:
+              - kube-state-metrics.monitoring-prod.svc.cluster.local:8080

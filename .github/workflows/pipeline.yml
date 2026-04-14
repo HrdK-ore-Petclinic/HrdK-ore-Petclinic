@@ -81,15 +81,15 @@ jobs:
 
           FILES=$(git diff --name-only HEAD~1 HEAD)
 
-          # --- Detect k8s-only changes (excluding monitoring) ---
-          if echo "$FILES" | grep -q '^k8s/' && echo "$FILES" | grep -qv '^k8s/monitoring/'; then
+          # --- Detect k8s changes (excluding .monitoring) ---
+          if echo "$FILES" | grep -q '^k8s/' && echo "$FILES" | grep -qv '^k8s/\.monitoring/'; then
             K8S=true
           else
             K8S=false
           fi
 
           # --- Detect monitoring changes ---
-          if echo "$FILES" | grep -q '^k8s/monitoring/'; then
+          if echo "$FILES" | grep -q '^k8s/\.monitoring/'; then
             MONITORING=true
           else
             MONITORING=false
@@ -242,13 +242,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy monitoring stack
+      - name: Deploy monitoring stack (dev)
         run: |
-          kubectl apply -f k8s/monitoring/ -n monitoring
+          kubectl apply -R -f k8s/.monitoring/dev/
 
 
 # ------------------------
-# 5. DEPLOY PROD
+# 5. DEPLOY PROD (services)
 # ------------------------
   deploy-prod:
     needs: build-and-push
@@ -271,3 +271,23 @@ jobs:
           done
 
           kubectl rollout status deployment -n prod --timeout=300s
+
+
+# ------------------------
+# 5b. DEPLOY PROD (monitoring)
+# ------------------------
+  deploy-prod-monitoring:
+    needs: detect-changes
+    runs-on: [self-hosted, Linux, X64, k8s]
+
+    if: |
+      needs.detect-changes.outputs.monitoring_changed == 'true' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy monitoring stack (prod)
+        run: |
+          kubectl apply -R -f k8s/.monitoring/prod/

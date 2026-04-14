@@ -13,6 +13,8 @@ spec:
       labels:
         app: grafana
     spec:
+      nodeSelector:
+        monitoring: dev   # 
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -29,11 +31,11 @@ spec:
             - containerPort: 3000
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "512Mi"
+              cpu: "200m"
             limits:
-              memory: "256Mi"
-              cpu: "300m"
+              memory: "1Gi"
+              cpu: "1000m"
           volumeMounts:
             - name: grafana-config-volume
               mountPath: /etc/grafana

@@ -11,7 +11,7 @@ data:
     scrape_configs:
 
       # ==========================================
-      # Kubernetes Pods (Spring Boot / Apps)
+      #  Kubernetes Pods (Spring Apps)
       # ==========================================
       - job_name: 'kubernetes-pods'
 
@@ -22,21 +22,25 @@ data:
                 - dev
 
         relabel_configs:
+          # nur Pods mit scrape annotation
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
-            regex: .+
+            regex: "true"
 
+          # metrics path (fallback /actuator/prometheus)
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
             action: replace
             target_label: __metrics_path__
             regex: (.+)
 
+          # port setzen
           - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
             action: replace
             regex: ([^:]+)(?::\d+)?;(\d+)
             replacement: $1:$2
             target_label: __address__
 
+          # labels übernehmen
           - action: labelmap
             regex: __meta_kubernetes_pod_label_(.+)
 
@@ -48,7 +52,7 @@ data:
 
 
       # ==========================================
-      # Kubelet / cAdvisor (CPU / RAM)
+      #  Kubernetes Nodes (cAdvisor)
       # ==========================================
       - job_name: 'kubernetes-nodes-cadvisor'
 
@@ -70,26 +74,47 @@ data:
             replacement: kubernetes.default.svc:443
 
           - source_labels: [__meta_kubernetes_node_name]
-            regex: (.+)
             target_label: __metrics_path__
             replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
 
-
       # ==========================================
-      # Node Exporter (FIXED)
+      #  Node Exporter (PER NODE FIX)
       # ==========================================
       - job_name: 'node-exporter'
 
-        static_configs:
-          - targets:
-              - node-exporter.monitoring-dev.svc.cluster.local:9100
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - monitoring-dev
 
+        relabel_configs:
+          # nur node-exporter Pods
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: node-exporter
+
+          # richtige IP setzen
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: $1:9100
+
+          # node name hinzufügen (DAS IST DER KEY)
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: nodename
 
       # ==========================================
-      # kube-state-metrics (FIXED)
+      #  kube-state-metrics (CLEAN)
       # ==========================================
       - job_name: 'kube-state-metrics'
 
-        static_configs:
-          - targets:
-              - kube-state-metrics.monitoring-dev.svc.cluster.local:8080
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - monitoring-dev
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: kube-state-metrics

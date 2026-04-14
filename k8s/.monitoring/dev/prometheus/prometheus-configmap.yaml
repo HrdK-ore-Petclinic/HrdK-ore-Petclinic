@@ -83,16 +83,8 @@ data:
       # ==========================================
       - job_name: 'node-exporter'
 
-        kubernetes_sd_configs:
-          - role: endpoints
-            namespaces:
-              names:
-                - monitoring-dev
-
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_service_name]
-            action: keep
-            regex: node-exporter
+          - targets:
+              - node-exporter.monitoring-dev.svc.cluster.local:9100       
 
         #  - source_labels: [__meta_kubernetes_endpoint_port_number]  #issues with prom scraping
         #    action: keep                                             #fixed by delete this

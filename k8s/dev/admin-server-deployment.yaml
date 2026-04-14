@@ -17,6 +17,8 @@ spec:
         prometheus.io/path: "/actuator/prometheus"
         prometheus.io/port: "9090"
     spec:
+      nodeSelector:
+        env: dev   #changed propper labeling
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

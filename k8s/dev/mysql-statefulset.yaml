@@ -14,6 +14,8 @@ spec:
       labels:
         app: mysql
     spec:
+      nodeSelector:
+        env: dev 
       containers:
         - name: mysql
           image: mysql:8.0

@@ -94,9 +94,9 @@ data:
             action: keep
             regex: node-exporter
 
-          - source_labels: [__meta_kubernetes_endpoint_port_number]
-            action: keep
-            regex: "9100"
+        #  - source_labels: [__meta_kubernetes_endpoint_port_number]  #issues with prom scraping
+        #    action: keep                                             #fixed by delete this
+        #    regex: "9100"                                            #now will scrape all nodes in monitoring-dev
 
 
       # ==========================================

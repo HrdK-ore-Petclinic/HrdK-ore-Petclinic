@@ -13,6 +13,8 @@ spec:
       labels:
         app: prometheus
     spec:
+      nodeSelector:
+        monitoring: dev 
       serviceAccountName: prometheus   # 🔥 WICHTIG
       containers:
         - name: prometheus

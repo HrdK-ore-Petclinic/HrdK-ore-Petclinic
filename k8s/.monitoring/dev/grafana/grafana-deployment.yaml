@@ -13,6 +13,8 @@ spec:
       labels:
         app: grafana
     spec:
+      nodeSelector:
+        monitoring: dev   # 
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

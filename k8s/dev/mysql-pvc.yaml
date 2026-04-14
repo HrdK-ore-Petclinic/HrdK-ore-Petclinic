@@ -9,3 +9,4 @@ spec:
   resources:
     requests:
       storage: 5Gi
+  storageClassName: local-path   #bind to local path for changing workers

@@ -12,8 +12,8 @@ spec:
       labels:
         app: node-exporter
     spec:
-      hostNetwork: true
-      hostPID: true
+     # hostNetwork: true    #had issues with prom finding nodeexporter
+     # hostPID: true
       containers:
         - name: node-exporter
           image: prom/node-exporter:latest

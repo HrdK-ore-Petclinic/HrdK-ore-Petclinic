@@ -39,12 +39,13 @@ spec:
           volumeMounts:
             - name: grafana-config-volume
               mountPath: /etc/grafana
-            - name: grafana-datasource-volume
-              mountPath: /etc/grafana/provisioning/datasources
-      volumes:
+            - name: grafana-storage
+              mountPath: /grafana
+
+      volumes:   #indentation
         - name: grafana-config-volume
           configMap:
             name: grafana-config
-        - name: grafana-datasource-volume
-          configMap:
-            name: grafana-datasource
+        - name: grafana-storage
+          persistentVolumeClaim:
+            claimName: grafana-pvc

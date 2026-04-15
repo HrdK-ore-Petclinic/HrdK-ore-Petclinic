@@ -15,7 +15,7 @@ spec:
     spec:
       nodeSelector:
         monitoring: dev 
-      serviceAccountName: prometheus   # 🔥 WICHTIG
+      serviceAccountName: prometheus   # important
       containers:
         - name: prometheus
           image: prom/prometheus:latest
@@ -34,7 +34,13 @@ spec:
           volumeMounts:
             - name: prometheus-config-volume
               mountPath: /etc/prometheus
-      volumes:
+            - name: prometheus-storage
+              mountPath: /prometheus
+
+      volumes:   #indentation
         - name: prometheus-config-volume
           configMap:
             name: prometheus-config
+        - name: prometheus-storage
+          persistentVolumeClaim:
+            claimName: prometheus-pvc

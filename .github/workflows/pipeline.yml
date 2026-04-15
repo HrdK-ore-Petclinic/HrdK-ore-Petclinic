@@ -42,7 +42,9 @@ jobs:
           cache: maven
 
       - name: Run tests
-        run: mvn test --batch-mode
+        run: |
+          sudo rm -f /tmp/spring.log
+          mvn test --batch-mode
 
 
 # ------------------------

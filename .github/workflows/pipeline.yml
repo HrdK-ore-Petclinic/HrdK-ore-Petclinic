@@ -1,20 +1,21 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline — Prod
 
 on:
   push:
-    branches: [dev]
-  pull_request:
     branches: [main]
-    types: [closed]
   workflow_dispatch:
-    inputs:
-      service:
-        description: "Which service to build and deploy?"
-        required: true
-        default: "all"
-        type: choice
-        options:
-          - all
+
+jobs:
+
+# ------------------------
+# 1. BUILD & PUSH
+# ------------------------
+  build-and-push:
+    runs-on: [self-hosted, Linux, X64, k8s]
+
+    strategy:
+      matrix:
+        service:
           - spring-petclinic-admin-server
           - spring-petclinic-api-gateway
           - spring-petclinic-config-server
@@ -23,119 +24,6 @@ on:
           - spring-petclinic-genai-service
           - spring-petclinic-vets-service
           - spring-petclinic-visits-service
-
-jobs:
-
-# ------------------------
-# 1. BUILD & TEST
-# ------------------------
-  build-and-test:
-    if: |
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    steps:
-      - name: Check source branch (PR only)
-        if: github.event_name == 'pull_request'
-        run: |
-          if [ "${{ github.head_ref }}" != "dev" ]; then
-            echo "ERROR: Only 'dev' can be merged into 'main'"
-            exit 1
-          fi
-
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          java-version: "17"
-          distribution: "temurin"
-          cache: maven
-
-      - name: Run tests
-        run: mvn test --batch-mode
-
-
-# ------------------------
-# 2. DETECT CHANGES
-# ------------------------
-  detect-changes:
-    needs: build-and-test
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    outputs:
-      services: ${{ steps.set.outputs.services }}
-      k8s_changed: ${{ steps.set.outputs.k8s_changed }}
-      monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect changes
-        id: set
-        run: |
-          ALL_SERVICES='["spring-petclinic-admin-server","spring-petclinic-api-gateway","spring-petclinic-config-server","spring-petclinic-customers-service","spring-petclinic-discovery-server","spring-petclinic-genai-service","spring-petclinic-vets-service","spring-petclinic-visits-service"]'
-
-          FILES=$(git diff --name-only HEAD~1 HEAD)
-
-          # --- Detect k8s changes (excluding .monitoring) ---
-          if echo "$FILES" | grep -q '^k8s/' && echo "$FILES" | grep -qv '^k8s/\.monitoring/'; then
-            K8S=true
-          else
-            K8S=false
-          fi
-
-          # --- Detect monitoring changes ---
-          if echo "$FILES" | grep -q '^k8s/\.monitoring/'; then
-            MONITORING=true
-          else
-            MONITORING=false
-          fi
-
-          # --- workflow_dispatch override ---
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            if [ "${{ inputs.service }}" == "all" ]; then
-              SERVICES=$ALL_SERVICES
-            else
-              SERVICES="[\"${{ inputs.service }}\"]"
-            fi
-
-          # --- PR merge: rebuild everything ---
-          elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            SERVICES=$ALL_SERVICES
-
-          # --- push: detect changed service folders ---
-          else
-            SERVICES=$(echo "$FILES" \
-              | grep -oP 'spring-petclinic-[^/]+' \
-              | sort -u \
-              | jq -R . | jq -sc .)
-
-            # Guard: if grep found nothing, jq outputs "[]" — but double-check
-            if [ -z "$SERVICES" ]; then
-              SERVICES="[]"
-            fi
-          fi
-
-          echo "services=$SERVICES" >> $GITHUB_OUTPUT
-          echo "k8s_changed=$K8S" >> $GITHUB_OUTPUT
-          echo "monitoring_changed=$MONITORING" >> $GITHUB_OUTPUT
-
-
-# ------------------------
-# 3. BUILD & PUSH
-# ------------------------
-  build-and-push:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.services != '[]'
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
       fail-fast: false
 
     steps:
@@ -147,7 +35,7 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Login Docker
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -162,107 +50,26 @@ jobs:
             -Dspring-boot.build-image.imageName=ross1832/${{ matrix.service }}:${SHORT_SHA} \
             --batch-mode -DskipTests
 
-      - name: Cleanup
+      - name: Cleanup local image
         run: docker image rm ross1832/${{ matrix.service }}:${GITHUB_SHA::7} || true
 
 
 # ------------------------
-# 4. DEPLOY DEV (services)
-# ------------------------
-  deploy-dev:
-    needs: [detect-changes, build-and-push]
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    if: |
-      needs.detect-changes.outputs.services != '[]' &&
-      (
-        (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-        github.event_name == 'workflow_dispatch'
-      )
-
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
-      fail-fast: false
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy ${{ matrix.service }} to dev
-        run: |
-          SHORT=$(echo "${{ matrix.service }}" | sed 's/spring-petclinic-//')
-          SHORT_SHA=${GITHUB_SHA::7}
-          kubectl apply -f k8s/dev/${SHORT}-deployment.yaml -n dev
-          kubectl apply -f k8s/dev/${SHORT}-service.yaml -n dev
-          kubectl set image deployment/${SHORT} \
-            ${SHORT}=ross1832/${{ matrix.service }}:${SHORT_SHA} -n dev
-          kubectl rollout status deployment/${SHORT} -n dev --timeout=180s
-
-
-# ------------------------
-# 4b. DEPLOY DEV (k8s-only)
-# ------------------------
-  deploy-dev-k8s:
-    needs: detect-changes
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    if: |
-      needs.detect-changes.outputs.k8s_changed == 'true' &&
-      needs.detect-changes.outputs.services == '[]' &&
-      (
-        (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-        github.event_name == 'workflow_dispatch'
-      )
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Apply k8s manifests only (no image change)
-        run: |
-          kubectl apply -f k8s/dev/ -n dev
-          kubectl get deployments -n dev -o name \
-            | xargs -n1 kubectl rollout restart -n dev
-          kubectl rollout status deployment -n dev --timeout=180s
-
-
-# ------------------------
-# 4c. DEPLOY DEV (monitoring)
-# ------------------------
-  deploy-dev-monitoring:
-    needs: detect-changes
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    if: |
-      needs.detect-changes.outputs.monitoring_changed == 'true' &&
-      (
-        (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
-        github.event_name == 'workflow_dispatch'
-      )
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy monitoring stack (dev)
-        run: |
-          kubectl apply -R -f k8s/.monitoring/dev/
-
-
-# ------------------------
-# 5. DEPLOY PROD (services)
+# 2. DEPLOY PROD
 # ------------------------
   deploy-prod:
     needs: build-and-push
     runs-on: [self-hosted, Linux, X64, k8s]
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
     environment: prod
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy prod
+      - name: Deploy all services to prod
         run: |
           SHORT_SHA=${GITHUB_SHA::7}
-          kubectl apply -f k8s/prod/ -n prod
+
+          kubectl apply -f k8s/ -n prod
 
           for SVC in admin-server api-gateway config-server customers-service \
                       discovery-server genai-service vets-service visits-service; do
@@ -274,20 +81,15 @@ jobs:
 
 
 # ------------------------
-# 5b. DEPLOY PROD (monitoring)
+# 3. DEPLOY PROD (monitoring)
 # ------------------------
   deploy-prod-monitoring:
-    needs: detect-changes
+    needs: build-and-push
     runs-on: [self-hosted, Linux, X64, k8s]
-
-    if: |
-      needs.detect-changes.outputs.monitoring_changed == 'true' &&
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.merged == true
+    environment: prod
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy monitoring stack (prod)
-        run: |
-          kubectl apply -R -f k8s/.monitoring/prod/
+      - name: Deploy monitoring stack
+        run: kubectl apply -R -f k8s/monitoring/ -n monitoring-prod

@@ -1,6 +1,8 @@
 name: CI/CD Pipeline — Prod
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -44,18 +46,73 @@ jobs:
 
 
 # ------------------------
-# 2. DEPLOY PROD (services)
+# 2. DETECT CHANGES
 # ------------------------
-  deploy-prod:
+  detect-changes:
     needs: build-and-test
     runs-on: [self-hosted, Linux, X64, k8s]
+
+    outputs:
+      deployment_changed: ${{ steps.set.outputs.deployment_changed }}
+      config_changed: ${{ steps.set.outputs.config_changed }}
+      monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        id: set
+        run: |
+          # workflow_dispatch: always deploy everything
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "deployment_changed=true" >> $GITHUB_OUTPUT
+            echo "config_changed=true" >> $GITHUB_OUTPUT
+            echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          FILES=$(git diff --name-only HEAD~1 HEAD)
+
+          # deployment yamls changed → image update needed
+          if echo "$FILES" | grep -qP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
+            echo "deployment_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "deployment_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # non-deployment k8s files changed (service, ingress, pvc, secret, statefulset)
+          if echo "$FILES" | grep -qP '^k8s/(?!monitoring/)' \
+            && echo "$FILES" | grep -qvP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
+            echo "config_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "config_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+          # monitoring subfolder changed
+          if echo "$FILES" | grep -q '^k8s/monitoring/'; then
+            echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "monitoring_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+
+# ------------------------
+# 3. DEPLOY PROD (image update)
+# ------------------------
+  deploy-prod-image:
+    needs: detect-changes
+    runs-on: [self-hosted, Linux, X64, k8s]
     environment: prod
+
+    if: needs.detect-changes.outputs.deployment_changed == 'true'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy all services to prod
-        if: inputs.service == 'all'
+      - name: Deploy all services (image update)
+        if: github.event_name == 'push' || inputs.service == 'all'
         run: |
           IMAGE_TAG=${{ inputs.image_tag }}
 
@@ -69,26 +126,48 @@ jobs:
 
           kubectl rollout status deployment -n prod --timeout=300s
 
-      - name: Deploy single service to prod
-        if: inputs.service != 'all'
+      - name: Deploy single service (image update)
+        if: github.event_name == 'workflow_dispatch' && inputs.service != 'all'
         run: |
           IMAGE_TAG=${{ inputs.image_tag }}
           SHORT=$(echo "${{ inputs.service }}" | sed 's/spring-petclinic-//')
 
           kubectl apply -f k8s/${SHORT}-deployment.yaml -n prod
-          kubectl apply -f k8s/${SHORT}-service.yaml -n prod
           kubectl set image deployment/${SHORT} \
             ${SHORT}=ross1832/${{ inputs.service }}:${IMAGE_TAG} -n prod
           kubectl rollout status deployment/${SHORT} -n prod --timeout=300s
 
 
 # ------------------------
-# 3. DEPLOY PROD (monitoring)
+# 4. DEPLOY PROD (config-only)
 # ------------------------
-  deploy-prod-monitoring:
-    needs: deploy-prod
+  deploy-prod-config:
+    needs: detect-changes
     runs-on: [self-hosted, Linux, X64, k8s]
     environment: prod
+
+    if: |
+      needs.detect-changes.outputs.config_changed == 'true' &&
+      needs.detect-changes.outputs.deployment_changed == 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply config changes (no image update)
+        run: |
+          kubectl apply -f k8s/ -n prod
+          kubectl rollout status deployment -n prod --timeout=300s
+
+
+# ------------------------
+# 5. DEPLOY PROD (monitoring)
+# ------------------------
+  deploy-prod-monitoring:
+    needs: detect-changes
+    runs-on: [self-hosted, Linux, X64, k8s]
+    environment: prod
+
+    if: needs.detect-changes.outputs.monitoring_changed == 'true'
 
     steps:
       - uses: actions/checkout@v4

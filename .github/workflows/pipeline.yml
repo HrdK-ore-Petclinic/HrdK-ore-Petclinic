@@ -1,21 +1,18 @@
 name: CI/CD Pipeline — Prod
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
-
-jobs:
-
-# ------------------------
-# 1. BUILD & PUSH
-# ------------------------
-  build-and-push:
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    strategy:
-      matrix:
-        service:
+    inputs:
+      image_tag:
+        description: "Docker image tag to deploy (SHORT_SHA from dev pipeline)"
+        required: true
+      service:
+        description: "Which service to deploy?"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
           - spring-petclinic-admin-server
           - spring-petclinic-api-gateway
           - spring-petclinic-config-server
@@ -24,7 +21,14 @@ jobs:
           - spring-petclinic-genai-service
           - spring-petclinic-vets-service
           - spring-petclinic-visits-service
-      fail-fast: false
+
+jobs:
+
+# ------------------------
+# 1. BUILD & TEST
+# ------------------------
+  build-and-test:
+    runs-on: [self-hosted, Linux, X64, k8s]
 
     steps:
       - uses: actions/checkout@v4
@@ -35,30 +39,15 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build & Push
-        run: |
-          SHORT_SHA=${GITHUB_SHA::7}
-          mvn spring-boot:build-image \
-            -pl ${{ matrix.service }} \
-            -Dspring-boot.build-image.publish=true \
-            -Dspring-boot.build-image.imageName=ross1832/${{ matrix.service }}:${SHORT_SHA} \
-            --batch-mode -DskipTests
-
-      - name: Cleanup local image
-        run: docker image rm ross1832/${{ matrix.service }}:${GITHUB_SHA::7} || true
+      - name: Run tests
+        run: mvn test --batch-mode
 
 
 # ------------------------
-# 2. DEPLOY PROD
+# 2. DEPLOY PROD (services)
 # ------------------------
   deploy-prod:
-    needs: build-and-push
+    needs: build-and-test
     runs-on: [self-hosted, Linux, X64, k8s]
     environment: prod
 
@@ -66,25 +55,38 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy all services to prod
+        if: inputs.service == 'all'
         run: |
-          SHORT_SHA=${GITHUB_SHA::7}
+          IMAGE_TAG=${{ inputs.image_tag }}
 
           kubectl apply -f k8s/ -n prod
 
           for SVC in admin-server api-gateway config-server customers-service \
                       discovery-server genai-service vets-service visits-service; do
             kubectl set image deployment/${SVC} \
-              ${SVC}=ross1832/spring-petclinic-${SVC}:${SHORT_SHA} -n prod
+              ${SVC}=ross1832/spring-petclinic-${SVC}:${IMAGE_TAG} -n prod
           done
 
           kubectl rollout status deployment -n prod --timeout=300s
+
+      - name: Deploy single service to prod
+        if: inputs.service != 'all'
+        run: |
+          IMAGE_TAG=${{ inputs.image_tag }}
+          SHORT=$(echo "${{ inputs.service }}" | sed 's/spring-petclinic-//')
+
+          kubectl apply -f k8s/${SHORT}-deployment.yaml -n prod
+          kubectl apply -f k8s/${SHORT}-service.yaml -n prod
+          kubectl set image deployment/${SHORT} \
+            ${SHORT}=ross1832/${{ inputs.service }}:${IMAGE_TAG} -n prod
+          kubectl rollout status deployment/${SHORT} -n prod --timeout=300s
 
 
 # ------------------------
 # 3. DEPLOY PROD (monitoring)
 # ------------------------
   deploy-prod-monitoring:
-    needs: build-and-push
+    needs: deploy-prod
     runs-on: [self-hosted, Linux, X64, k8s]
     environment: prod
 

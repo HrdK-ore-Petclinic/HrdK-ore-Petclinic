@@ -48,54 +48,54 @@ jobs:
 # ------------------------
 # 2. DETECT CHANGES
 # ------------------------
-  detect-changes:
-    needs: build-and-test
-    runs-on: [self-hosted, Linux, X64, k8s]
+  # detect-changes:
+  #   needs: build-and-test
+  #   runs-on: [self-hosted, Linux, X64, k8s]
 
-    outputs:
-      deployment_changed: ${{ steps.set.outputs.deployment_changed }}
-      config_changed: ${{ steps.set.outputs.config_changed }}
-      monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
+  #   outputs:
+  #     deployment_changed: ${{ steps.set.outputs.deployment_changed }}
+  #     config_changed: ${{ steps.set.outputs.config_changed }}
+  #     monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
 
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 2
 
-      - name: Detect changes
-        id: set
-        run: |
-          # workflow_dispatch: always deploy everything
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "deployment_changed=true" >> $GITHUB_OUTPUT
-            echo "config_changed=true" >> $GITHUB_OUTPUT
-            echo "monitoring_changed=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+  #     - name: Detect changes
+  #       id: set
+  #       run: |
+  #         # workflow_dispatch: always deploy everything
+  #         if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+  #           echo "deployment_changed=true" >> $GITHUB_OUTPUT
+  #           echo "config_changed=true" >> $GITHUB_OUTPUT
+  #           echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+  #           exit 0
+  #         fi
 
-          FILES=$(git diff --name-only HEAD~1 HEAD)
+  #         FILES=$(git diff --name-only HEAD~1 HEAD)
 
-          # deployment yamls changed → image update needed
-          if echo "$FILES" | grep -qP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
-            echo "deployment_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "deployment_changed=false" >> $GITHUB_OUTPUT
-          fi
+  #         # deployment yamls changed → image update needed
+  #         if echo "$FILES" | grep -qP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
+  #           echo "deployment_changed=true" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "deployment_changed=false" >> $GITHUB_OUTPUT
+  #         fi
 
-          # non-deployment k8s files changed (service, ingress, pvc, secret, statefulset)
-          if echo "$FILES" | grep -qP '^k8s/(?!monitoring/)' \
-            && echo "$FILES" | grep -qvP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
-            echo "config_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "config_changed=false" >> $GITHUB_OUTPUT
-          fi
+  #         # non-deployment k8s files changed (service, ingress, pvc, secret, statefulset)
+  #         if echo "$FILES" | grep -qP '^k8s/(?!monitoring/)' \
+  #           && echo "$FILES" | grep -qvP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
+  #           echo "config_changed=true" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "config_changed=false" >> $GITHUB_OUTPUT
+  #         fi
 
-          # monitoring subfolder changed
-          if echo "$FILES" | grep -q '^k8s/monitoring/'; then
-            echo "monitoring_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "monitoring_changed=false" >> $GITHUB_OUTPUT
-          fi
+  #         # monitoring subfolder changed
+  #         if echo "$FILES" | grep -q '^k8s/monitoring/'; then
+  #           echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "monitoring_changed=false" >> $GITHUB_OUTPUT
+  #         fi
 
 
 # ------------------------

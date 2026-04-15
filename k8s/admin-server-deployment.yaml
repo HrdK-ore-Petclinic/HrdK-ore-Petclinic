@@ -18,7 +18,7 @@ spec:
         prometheus.io/port: "9090"
     spec:
       nodeSelector:
-        env: prod   #changed propper labeling
+        env: prod #changed propper labeling
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -39,4 +39,3 @@ spec:
               value: docker
           ports:
             - containerPort: 9090
-

@@ -7,6 +7,3 @@ data:
   grafana.ini: |
     [auth.anonymous]
     enabled = false
-
-    [auth]
-    disable_login_form = false

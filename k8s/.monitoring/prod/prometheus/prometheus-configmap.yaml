@@ -76,14 +76,30 @@ data:
 
 
       # ==========================================
-      # Node Exporter (FIXED)
+      #  Node Exporter (PER NODE FIX)
       # ==========================================
       - job_name: 'node-exporter'
 
-        static_configs:
-          - targets:
-              - node-exporter.monitoring-dev.svc.cluster.local:9100 # node-exporter only needs one target, no prod node-exporter necessary!
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - monitoring-dev
 
+        relabel_configs:
+          # nur node-exporter Pods
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: node-exporter
+
+          # richtige IP setzen
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: $1:9100
+
+          # node name hinzufügen (DAS IST DER KEY)
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: nodename
 
       # ==========================================
       # kube-state-metrics (FIXED)

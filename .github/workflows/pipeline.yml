@@ -55,7 +55,7 @@ jobs:
     outputs:
       deployment_changed: ${{ steps.set.outputs.deployment_changed }}
       config_changed: ${{ steps.set.outputs.config_changed }}
-      monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
+     # monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
 
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +69,7 @@ jobs:
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "deployment_changed=true" >> $GITHUB_OUTPUT
             echo "config_changed=true" >> $GITHUB_OUTPUT
-            echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+           # echo "monitoring_changed=true" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -82,20 +82,20 @@ jobs:
             echo "deployment_changed=false" >> $GITHUB_OUTPUT
           fi
 
-          # non-deployment k8s files changed (service, ingress, pvc, secret, statefulset)
-          if echo "$FILES" | grep -qP '^k8s/(?!monitoring/)' \
-            && echo "$FILES" | grep -qvP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
-            echo "config_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "config_changed=false" >> $GITHUB_OUTPUT
-          fi
+         # # non-deployment k8s files changed (service, ingress, pvc, secret, statefulset)
+         # if echo "$FILES" | grep -qP '^k8s/(?!monitoring/)' \
+         #   && echo "$FILES" | grep -qvP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
+         #   echo "config_changed=true" >> $GITHUB_OUTPUT
+         # else
+         #   echo "config_changed=false" >> $GITHUB_OUTPUT
+         # fi
 
-          # monitoring subfolder changed
-          if echo "$FILES" | grep -q '^k8s/monitoring/'; then
-            echo "monitoring_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "monitoring_changed=false" >> $GITHUB_OUTPUT
-          fi
+         # # monitoring subfolder changed
+         # if echo "$FILES" | grep -q '^k8s/monitoring/'; then
+         #   echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+         # else
+         #   echo "monitoring_changed=false" >> $GITHUB_OUTPUT
+         # fi
 
 
 # ------------------------
@@ -162,15 +162,15 @@ jobs:
 # ------------------------
 # 5. DEPLOY PROD (monitoring)
 # ------------------------
-  deploy-prod-monitoring:
-    needs: detect-changes
-    runs-on: [self-hosted, Linux, X64, k8s]
-    environment: prod
+#  deploy-prod-monitoring:
+#    needs: detect-changes
+#    runs-on: [self-hosted, Linux, X64, k8s]
+#    environment: prod
+#
+#    if: needs.detect-changes.outputs.monitoring_changed == 'true'
 
-    if: needs.detect-changes.outputs.monitoring_changed == 'true'
+#    steps:
+#      - uses: actions/checkout@v4
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy monitoring stack
-        run: kubectl apply -R -f k8s/monitoring/ -n monitoring-prod
+#      - name: Deploy monitoring stack
+#        run: kubectl apply -R -f k8s/monitoring/ -n monitoring-prod

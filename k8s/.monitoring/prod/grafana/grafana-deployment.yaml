@@ -4,7 +4,7 @@ metadata:
   name: grafana
   namespace: monitoring-prod
 spec:
-  replicas: 2
+  replicas: 1   # set to 1 regarding PVC RWO
   selector:
     matchLabels:
       app: grafana
@@ -29,6 +29,20 @@ spec:
           image: grafana/grafana:latest
           ports:
             - containerPort: 3000
+
+          # Secret login -> see configmap
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+
           resources:
             requests:
               memory: "512Mi"
@@ -36,13 +50,14 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "1000m"
+
           volumeMounts:
             - name: grafana-config-volume
               mountPath: /etc/grafana
             - name: grafana-storage
-              mountPath: /grafana
+              mountPath: /var/lib/grafana   # had wrong folder path fixed now
 
-      volumes:   #indentation
+      volumes:
         - name: grafana-config-volume
           configMap:
             name: grafana-config

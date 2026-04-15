@@ -9,4 +9,4 @@ eureka:
 
 logging:
   file:
-    name: /tmp/spring-${random.uuid}.log
+    name: target/spring.log

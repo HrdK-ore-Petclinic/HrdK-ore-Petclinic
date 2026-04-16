@@ -32,6 +32,17 @@ spec:
       containers:
         - name: mysql
           image: mysql:8.0
+
+          command:
+            - bash
+            - "-c"
+            - |
+              SERVER_ID=$(echo $POD_NAME | awk -F'-' '{print $NF + 1}')
+              echo "[mysqld]" > /etc/mysql/conf.d/server-id.cnf
+              echo "server-id=$SERVER_ID" >> /etc/mysql/conf.d/server-id.cnf
+              echo "log-bin=mysql-bin" >> /etc/mysql/conf.d/server-id.cnf
+              exec docker-entrypoint.sh mysqld
+
           env:
             - name: MYSQL_ROOT_PASSWORD
               valueFrom:
@@ -43,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: mysql-secret
                   key: MYSQL_DATABASE
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
           ports:
             - containerPort: 3306
 

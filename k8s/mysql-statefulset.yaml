@@ -4,18 +4,31 @@ metadata:
   name: mysql
   namespace: prod
 spec:
+  serviceName: mysql
+  replicas: 2
   selector:
     matchLabels:
       app: mysql
-  serviceName: mysql
-  replicas: 1
+
   template:
     metadata:
       labels:
         app: mysql
     spec:
       nodeSelector:
-        env: prod   #changed propper labeling
+        env: prod
+
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - mysql
+              topologyKey: "kubernetes.io/hostname"
+
       containers:
         - name: mysql
           image: mysql:8.0
@@ -35,7 +48,13 @@ spec:
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
-      volumes:
-        - name: mysql-storage
-          persistentVolumeClaim:
-            claimName: mysql-pvc
+
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi

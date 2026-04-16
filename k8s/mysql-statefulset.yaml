@@ -45,15 +45,24 @@ spec:
                   key: MYSQL_DATABASE
           ports:
             - containerPort: 3306
+
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
+            - name: mysql-config
+              mountPath: /etc/mysql/conf.d
+
+      volumes:
+        - name: mysql-config
+          configMap:
+            name: mysql-config
 
   volumeClaimTemplates:
     - metadata:
         name: mysql-storage
       spec:
-        accessModes: ["ReadWriteOnce"]
+        accessModes:
+          - ReadWriteOnce
         storageClassName: longhorn
         resources:
           requests:

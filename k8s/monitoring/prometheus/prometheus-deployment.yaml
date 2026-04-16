@@ -16,7 +16,7 @@ spec:
       serviceAccountName: prometheus  
       containers:
         - name: prometheus
-          image: prom/prometheus:latest
+          image: prom/prometheus/prometheus:v2.51.1
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
             - "--storage.tsdb.retention.time=12h"

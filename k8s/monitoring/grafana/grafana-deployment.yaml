@@ -24,7 +24,7 @@ spec:
                 topologyKey: "kubernetes.io/hostname"
       containers:
         - name: grafana
-          image: grafana/grafana:13.0.0
+          image: grafana/grafana:12.4.3
           ports:
             - containerPort: 3000
           resources:

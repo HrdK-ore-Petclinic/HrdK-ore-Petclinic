@@ -1,4 +1,4 @@
-name: Deploy Monitoring
+name: Deploy Monitoring (PROD)
 
 on:
   workflow_dispatch:
@@ -15,9 +15,17 @@ jobs:
           echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
           echo "KUBECONFIG=$PWD/kubeconfig" >> $GITHUB_ENV
 
+      - name: Set prod context
+        run: |
+          kubectl config use-context kubernetes-admin-prod
+
+      - name: Debug #might be unecessary
+        run: |
+          kubectl config get-contexts
+          kubectl config current-context
+
       - name: Verify cluster connection
         run: |
-          kubectl config current-context
           kubectl get nodes
 
       - name: Apply monitoring manifests

@@ -2,21 +2,36 @@ name: Deploy Monitoring (PROD)
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        default: "main"
 
 jobs:
   deploy-monitoring:
     runs-on: [self-hosted, Linux, X64, k8s]
 
     steps:
-      - name: Checkout clean 
+      - name: Checkout clean
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
           clean: true
 
-      - name: Force clean workspace #added cleanup
+      - name: Force sync repo (hard reset to remote)
         run: |
-          git reset --hard
-          git clean -fd
+          git fetch origin
+          git reset --hard origin/${{ github.event.inputs.branch }}
+          git clean -fdx
+
+      - name: Debug commit (verify correct version)
+        run: |
+          echo "Current branch:"
+          git branch --show-current
+          echo "Latest commit:"
+          git log -1 --oneline
 
       - name: Setup kubeconfig
         run: |

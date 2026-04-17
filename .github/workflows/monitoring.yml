@@ -48,6 +48,11 @@ jobs:
 
       - name: Apply monitoring manifests
         run: |
+          echo "FILES:"
+          find k8s/monitoring -type f
+          
+          echo "---- GRAFANA CONTENT ----"
+          grep -r "grafana/grafana" k8s/monitoring || true
           kubectl apply -f k8s/monitoring -n monitoring-prod
 
       - name: Restart monitoring deployments

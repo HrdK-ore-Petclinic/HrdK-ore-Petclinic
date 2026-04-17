@@ -8,7 +8,15 @@ jobs:
     runs-on: [self-hosted, Linux, X64, k8s]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout clean 
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Force clean workspace #added cleanup
+        run: |
+          git reset --hard
+          git clean -fd
 
       - name: Setup kubeconfig
         run: |
@@ -18,11 +26,6 @@ jobs:
       - name: Set prod context
         run: |
           kubectl config use-context kubernetes-admin-prod
-
-      - name: Debug #might be unecessary
-        run: |
-          kubectl config get-contexts
-          kubectl config current-context
 
       - name: Verify cluster connection
         run: |

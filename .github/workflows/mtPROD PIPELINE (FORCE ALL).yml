@@ -1,0 +1,149 @@
+name: CI/CD Pipeline — Prod (Force All)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-push-deploy:
+    runs-on: [self-hosted, Linux, X64, k8s]
+
+    steps:
+      # ------------------------
+      # Checkout clean
+      # ------------------------
+      - name: Checkout clean
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: true
+
+      - name: Force sync repo
+        run: |
+          git fetch origin
+          git reset --hard origin/main
+          git clean -fdx
+
+      # ------------------------
+      # Version
+      # ------------------------
+      - name: Set SHORT_SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      # ------------------------
+      # Java Setup
+      # ------------------------
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: maven
+
+      # ------------------------
+      # Docker Login
+      # ------------------------
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # ------------------------
+      # Build ALL Images
+      # ------------------------
+      - name: Build all services
+        run: |
+          SERVICES=(
+            spring-petclinic-admin-server
+            spring-petclinic-api-gateway
+            spring-petclinic-config-server
+            spring-petclinic-customers-service
+            spring-petclinic-discovery-server
+            spring-petclinic-genai-service
+            spring-petclinic-vets-service
+            spring-petclinic-visits-service
+          )
+
+          for SVC in "${SERVICES[@]}"; do
+            echo "🚀 Building $SVC"
+
+            mvn spring-boot:build-image \
+              -pl $SVC \
+              -Dspring-boot.build-image.publish=false \
+              -Dspring-boot.build-image.imageName=${{ secrets.DOCKER_USERNAME }}/$SVC:${SHORT_SHA} \
+              --batch-mode -DskipTests
+          done
+
+      # ------------------------
+      # Push ALL Images
+      # ------------------------
+      - name: Push all images
+        run: |
+          SERVICES=(
+            spring-petclinic-admin-server
+            spring-petclinic-api-gateway
+            spring-petclinic-config-server
+            spring-petclinic-customers-service
+            spring-petclinic-discovery-server
+            spring-petclinic-genai-service
+            spring-petclinic-vets-service
+            spring-petclinic-visits-service
+          )
+
+          for SVC in "${SERVICES[@]}"; do
+            echo "📦 Pushing $SVC"
+
+            docker push ${{ secrets.DOCKER_USERNAME }}/$SVC:${SHORT_SHA}
+
+            docker tag ${{ secrets.DOCKER_USERNAME }}/$SVC:${SHORT_SHA} \
+                       ${{ secrets.DOCKER_USERNAME }}/$SVC:latest
+
+            docker push ${{ secrets.DOCKER_USERNAME }}/$SVC:latest
+          done
+
+      # ------------------------
+      # K8S Setup
+      # ------------------------
+      - name: Setup kubeconfig
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          echo "KUBECONFIG=$PWD/kubeconfig" >> $GITHUB_ENV
+
+      - name: Set prod context
+        run: kubectl config use-context kubernetes-admin-prod
+
+      # ------------------------
+      # Deploy ALL
+      # ------------------------
+      - name: Deploy all services
+        run: |
+          SERVICES=(
+            admin-server
+            api-gateway
+            config-server
+            customers-service
+            discovery-server
+            genai-service
+            vets-service
+            visits-service
+          )
+
+          kubectl apply -f k8s/ -n prod
+
+          for SVC in "${SERVICES[@]}"; do
+            FULL_NAME="spring-petclinic-$SVC"
+
+            echo "🚀 Deploying $SVC"
+
+            kubectl set image deployment/$SVC \
+              $SVC=${{ secrets.DOCKER_USERNAME }}/$FULL_NAME:${SHORT_SHA} -n prod
+          done
+
+          kubectl rollout status deployment -n prod --timeout=300s
+
+      # ------------------------
+      # Verify
+      # ------------------------
+      - name: Verify pods
+        run: |
+          kubectl get pods -n prod -o wide

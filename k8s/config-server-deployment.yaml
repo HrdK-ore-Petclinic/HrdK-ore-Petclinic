@@ -28,12 +28,15 @@ spec:
                   matchLabels:
                     app: config-server
                 topologyKey: "kubernetes.io/hostname"
+
       containers:
         - name: config-server
           image: ross1832/spring-petclinic-config-server:latest
           imagePullPolicy: Always
+
           ports:
             - containerPort: 8888
+
           resources:
             requests:
               memory: "512Mi"
@@ -41,6 +44,11 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "500m"
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
           startupProbe:
             httpGet:
               path: /actuator/health
@@ -48,6 +56,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 10
+
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -55,6 +64,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             failureThreshold: 3
+
           livenessProbe:
             httpGet:
               path: /actuator/health
@@ -62,3 +72,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 20
             failureThreshold: 3
+
+      volumes:
+        - name: tmp
+          emptyDir: {}

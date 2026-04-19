@@ -70,6 +70,7 @@ jobs:
             mvn spring-boot:build-image \
               -pl $SVC \
               -Dspring-boot.build-image.publish=false \
+              -Dspring-boot.build-image.cleanCache=true \
               -Dspring-boot.build-image.imageName=${{ secrets.DOCKER_USERNAME }}/$SVC:${SHORT_SHA} \
               --batch-mode -DskipTests
           done
@@ -94,11 +95,6 @@ jobs:
             echo "📦 Pushing $SVC"
 
             docker push ${{ secrets.DOCKER_USERNAME }}/$SVC:${SHORT_SHA}
-
-            docker tag ${{ secrets.DOCKER_USERNAME }}/$SVC:${SHORT_SHA} \
-                       ${{ secrets.DOCKER_USERNAME }}/$SVC:latest
-
-            docker push ${{ secrets.DOCKER_USERNAME }}/$SVC:latest
           done
 
       # ------------------------

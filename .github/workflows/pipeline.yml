@@ -1,8 +1,6 @@
 name: CI/CD Pipeline — Prod
 
-on:
-  push:
-    branches: [main]
+on:  #changed to non push deploy, prod should be manully triggered
   workflow_dispatch:
     inputs:
       image_tag:

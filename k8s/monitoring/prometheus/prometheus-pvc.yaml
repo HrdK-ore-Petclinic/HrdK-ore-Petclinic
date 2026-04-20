@@ -4,6 +4,7 @@ metadata:
   name: prometheus-pvc
   namespace: monitoring-prod
 spec:
+  storageClassName: longhorn-prod  # added longhorn pvc
   accessModes:
     - ReadWriteOnce
   resources:

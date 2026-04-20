@@ -24,7 +24,7 @@ spec:
 
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
-            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.path=/prometheus/data"
             - "--storage.tsdb.retention.time=12h"
 
           ports:
@@ -42,7 +42,7 @@ spec:
             - name: prometheus-config-volume
               mountPath: /etc/prometheus
             - name: prometheus-storage
-              mountPath: /prometheus
+              mountPath: /prometheus/data  ## issue prom wants to access this folder so i set it here
 
       volumes:
         - name: prometheus-config-volume

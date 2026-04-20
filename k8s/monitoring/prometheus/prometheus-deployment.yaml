@@ -15,15 +15,21 @@ spec:
     spec:
       nodeSelector:
         monitoring: prod
-      serviceAccountName: prometheus  
+
+      serviceAccountName: prometheus
+
       containers:
         - name: prometheus
-          image: prom/prometheus/prometheus@sha256:5550dc63da361dc30f6fe02ac0e4dfc736ededfef3c8d12a634db04a67824d78
+          image: prom/prometheus:latest
+
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
             - "--storage.tsdb.retention.time=12h"
+
           ports:
             - containerPort: 9090
+
           resources:
             requests:
               memory: "250Mi"
@@ -31,13 +37,14 @@ spec:
             limits:
               memory: "500Mi"
               cpu: "300m"
+
           volumeMounts:
             - name: prometheus-config-volume
               mountPath: /etc/prometheus
             - name: prometheus-storage
               mountPath: /prometheus
 
-      volumes:   # carful here needs to be on containers indentation
+      volumes:
         - name: prometheus-config-volume
           configMap:
             name: prometheus-config

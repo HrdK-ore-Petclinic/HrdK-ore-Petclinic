@@ -4,7 +4,7 @@ metadata:
   name: grafana
   namespace: monitoring-prod
 spec:
-  replicas: 1   # set to 1 regarding PVC RWO
+  replicas: 1
   selector:
     matchLabels:
       app: grafana
@@ -15,6 +15,7 @@ spec:
     spec:
       nodeSelector:
         monitoring: prod
+
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -23,14 +24,15 @@ spec:
                 labelSelector:
                   matchLabels:
                     app: grafana
-                topologyKey: "kubernetes.io/hostname"
+                topologyKey: kubernetes.io/hostname
+
       containers:
         - name: grafana
-          image: grafana/grafana:latest@sha256:0f86bada30d65ef9d0183b90c1e2682ac92d53d95da8bed322b984ea78a4a73a
+          image: grafana/grafana:latest
+
           ports:
             - containerPort: 3000
 
-          # Secret login -> see configmap
           env:
             - name: GF_SECURITY_ADMIN_USER
               valueFrom:
@@ -55,7 +57,7 @@ spec:
             - name: grafana-config-volume
               mountPath: /etc/grafana
             - name: grafana-storage
-              mountPath: /var/lib/grafana   # had wrong folder path fixed now
+              mountPath: /var/lib/grafana
 
       volumes:
         - name: grafana-config-volume

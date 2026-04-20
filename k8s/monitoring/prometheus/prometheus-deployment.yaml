@@ -22,6 +22,9 @@ spec:
         - name: prometheus
           image: prom/prometheus:latest
 
+          securityContext:
+            runAsUser: 0   # had no root permissions fixed here
+
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
             - "--storage.tsdb.path=/prometheus/data"

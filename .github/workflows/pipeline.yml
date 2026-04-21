@@ -153,7 +153,7 @@ jobs:
 
       - name: Apply config changes (no image update)
         run: |
-          kubectl apply -f k8s/ -n prod
+          kubectl apply -f k8s/ --exclude=*-deployment.yaml -n prod
           kubectl rollout status deployment -n prod --timeout=600s
 
 

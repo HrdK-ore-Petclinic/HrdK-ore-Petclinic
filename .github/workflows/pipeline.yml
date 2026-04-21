@@ -133,7 +133,7 @@ jobs:
           kubectl apply -f k8s/${SHORT}-deployment.yaml -n prod
           kubectl set image deployment/${SHORT} \
             ${SHORT}=ross1832/${{ inputs.service }}:${IMAGE_TAG} -n prod
-          kubectl rollout status deployment/${SHORT} -n prod --timeout=300s
+          kubectl rollout status deployment/${SHORT} -n prod --timeout=600s
 
 
 # ------------------------
@@ -154,7 +154,7 @@ jobs:
       - name: Apply config changes (no image update)
         run: |
           kubectl apply -f k8s/ -n prod
-          kubectl rollout status deployment -n prod --timeout=300s
+          kubectl rollout status deployment -n prod --timeout=600s
 
 
 # ------------------------

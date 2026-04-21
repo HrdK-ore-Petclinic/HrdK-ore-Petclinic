@@ -114,7 +114,7 @@ jobs:
         run: |
           IMAGE_TAG=${{ inputs.image_tag }}
 
-          kubectl apply -f k8s/ -n prod
+          kubectl apply -f k8s/ --exclude=*-deployment.yaml -n prod
 
           for SVC in admin-server api-gateway config-server customers-service \
                       discovery-server genai-service vets-service visits-service; do

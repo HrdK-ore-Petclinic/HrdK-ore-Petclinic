@@ -1,5 +1,5 @@
 variable "proxmox_api_token" {
-  description = "Proxmox API Token"
+  description = "Proxmox API Token from Vault"
   type        = string
   sensitive   = true
 }

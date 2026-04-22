@@ -16,6 +16,9 @@ spec:
       nodeSelector:
         monitoring: prod
 
+      securityContext:
+        fsGroup: 472   # permission fix
+
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

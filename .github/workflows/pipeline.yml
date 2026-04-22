@@ -1,13 +1,13 @@
-name: CI/CD Pipeline — Prod
+name: CI/CD — Prod
 
-on:  #changed to non push deploy, prod should be manully triggered
+on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Docker image tag to deploy (SHORT_SHA from dev pipeline)"
+      version:
+        description: "Version to deploy — format MUST be v#.#.# (e.g. v1.2.0)"
         required: true
       service:
-        description: "Which service to deploy?"
+        description: "Service to deploy (all = controlled rollout in dependency order)"
         required: true
         default: "all"
         type: choice
@@ -22,153 +22,240 @@ on:  #changed to non push deploy, prod should be manully triggered
           - spring-petclinic-vets-service
           - spring-petclinic-visits-service
 
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
 jobs:
 
-# ------------------------
-# 1. BUILD & TEST
-# ------------------------
-  build-and-test:
+  # ------------------------
+  # 1. VALIDATE
+  # ------------------------
+  validate:
     runs-on: [self-hosted, Linux, X64, k8s]
 
     steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
-        with:
-          java-version: "17"
-          distribution: "temurin"
-          cache: maven
-
-      - name: Run tests
-        run: mvn test --batch-mode
-
-
-# ------------------------
-# 2. DETECT CHANGES
-# ------------------------
-  detect-changes:
-    needs: build-and-test
-    runs-on: [self-hosted, Linux, X64, k8s]
-
-    outputs:
-      deployment_changed: ${{ steps.set.outputs.deployment_changed }}
-      config_changed: ${{ steps.set.outputs.config_changed }}
-     # monitoring_changed: ${{ steps.set.outputs.monitoring_changed }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect changes
-        id: set
+      - name: Validate version format
         run: |
-          # workflow_dispatch: always deploy everything
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "deployment_changed=true" >> $GITHUB_OUTPUT
-            echo "config_changed=true" >> $GITHUB_OUTPUT
-           # echo "monitoring_changed=true" >> $GITHUB_OUTPUT
+          VERSION="${{ github.event.inputs.version }}"
+
+          if ! echo "$VERSION" | grep -qP '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Invalid version format: '$VERSION'"
+            echo "   Required format: v#.#.# (e.g. v1.0.0, v2.14.3)"
+            echo "   NOT allowed: SHA tags, 'dev', 'latest', empty strings"
+            echo ""
+            echo "   Only versions created by the promotion pipeline are accepted here."
+            exit 1
+          fi
+
+          echo "✅ Version valid: $VERSION"
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Verify version exists on Docker Hub
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          SELECTED="${{ github.event.inputs.service }}"
+
+          SERVICES_TO_CHECK=""
+          if [ "$SELECTED" = "all" ]; then
+            SERVICES_TO_CHECK="spring-petclinic-admin-server
+            spring-petclinic-api-gateway
+            spring-petclinic-config-server
+            spring-petclinic-customers-service
+            spring-petclinic-discovery-server
+            spring-petclinic-genai-service
+            spring-petclinic-vets-service
+            spring-petclinic-visits-service"
+          else
+            SERVICES_TO_CHECK="$SELECTED"
+          fi
+
+          MISSING=()
+          for SVC in $SERVICES_TO_CHECK; do
+            IMAGE="${{ secrets.DOCKER_USERNAME }}/$SVC:$VERSION"
+            if ! docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+              echo "❌ Not found on Docker Hub: $IMAGE"
+              MISSING+=("$SVC")
+            else
+              echo "✅ Found: $IMAGE"
+            fi
+          done
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo ""
+            echo "❌ Missing images for version $VERSION:"
+            printf '   - %s\n' "${MISSING[@]}"
+            echo ""
+            echo "   Run the promotion pipeline first to create $VERSION tags."
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ All required images exist for version $VERSION"
+
+  # ------------------------
+  # 2. DEPLOY (controlled rollout)
+  # ------------------------
+  deploy:
+    needs: validate
+    runs-on: [self-hosted, Linux, X64, k8s]
+    environment: prod
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify cluster connection
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
+      # ------------------------
+      # Deploy helper — defined as shell function, reused below
+      # ------------------------
+      - name: Deploy services (controlled rollout)
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          SELECTED="${{ github.event.inputs.service }}"
+          REGISTRY="${{ secrets.DOCKER_USERNAME }}"
+
+          # Deploy single service with:
+          #   - manifest apply
+          #   - image update
+          #   - rollout status with diagnostics on failure
+          deploy_service() {
+            local SHORT=$1
+            local FULL="spring-petclinic-${SHORT}"
+            local IMAGE="${REGISTRY}/${FULL}:${VERSION}"
+            local TIMEOUT=${2:-600s}
+
+            echo ""
+            echo "=============================="
+            echo "🚀 Deploying: $SHORT"
+            echo "   Image   : $IMAGE"
+            echo "   Timeout : $TIMEOUT"
+            echo "=============================="
+
+            kubectl apply -f k8s/${SHORT}-deployment.yaml -n prod
+            kubectl apply -f k8s/${SHORT}-service.yaml -n prod
+
+            kubectl set image deployment/${SHORT} \
+              ${SHORT}=${IMAGE} \
+              -n prod
+
+            if ! kubectl rollout status deployment/${SHORT} -n prod --timeout=${TIMEOUT}; then
+              echo ""
+              echo "❌ Rollout failed for ${SHORT}"
+              echo ""
+              echo "=== Pod status ==="
+              kubectl get pods -n prod -l app=${SHORT}
+              echo ""
+              echo "=== Pod events ==="
+              kubectl describe pods -n prod -l app=${SHORT} | tail -80
+              echo ""
+              echo "💡 To rollback manually:"
+              echo "   kubectl rollout undo deployment/${SHORT} -n prod"
+              exit 1
+            fi
+
+            echo "✅ ${SHORT} deployed successfully"
+          }
+
+          # ------------------------
+          # Single service deploy
+          # ------------------------
+          if [ "$SELECTED" != "all" ]; then
+            SHORT=$(echo "$SELECTED" | sed 's/spring-petclinic-//')
+            deploy_service "$SHORT" "600s"
             exit 0
           fi
 
-          FILES=$(git diff --name-only HEAD~1 HEAD)
+          # ------------------------
+          # Controlled rollout (all services, in dependency order)
+          #
+          # Order rationale for Spring Cloud:
+          #   1. config-server     → serves config to everyone
+          #   2. discovery-server  → service registry (Eureka)
+          #   3. business services → need config + discovery ready
+          #   4. api-gateway       → routes to business services
+          #   5. genai-service     → longest startup, deploy last
+          # ------------------------
 
-          # deployment yamls changed → image update needed
-          if echo "$FILES" | grep -qP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
-            echo "deployment_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "deployment_changed=false" >> $GITHUB_OUTPUT
-          fi
+          echo ""
+          echo "=========================================="
+          echo "🚀 CONTROLLED ROLLOUT — version ${VERSION}"
+          echo "=========================================="
 
-         # # non-deployment k8s files changed (service, ingress, pvc, secret, statefulset)
-         # if echo "$FILES" | grep -qP '^k8s/(?!monitoring/)' \
-         #   && echo "$FILES" | grep -qvP '^k8s/(?!monitoring/).+-deployment\.yaml$'; then
-         #   echo "config_changed=true" >> $GITHUB_OUTPUT
-         # else
-         #   echo "config_changed=false" >> $GITHUB_OUTPUT
-         # fi
+          # Foundation layer
+          deploy_service "config-server"       "600s"
+          deploy_service "discovery-server"    "600s"
 
-         # # monitoring subfolder changed
-         # if echo "$FILES" | grep -q '^k8s/monitoring/'; then
-         #   echo "monitoring_changed=true" >> $GITHUB_OUTPUT
-         # else
-         #   echo "monitoring_changed=false" >> $GITHUB_OUTPUT
-         # fi
+          # Admin (depends on discovery)
+          deploy_service "admin-server"        "600s"
 
+          # Business services (depend on config + discovery)
+          deploy_service "customers-service"   "600s"
+          deploy_service "visits-service"      "600s"
+          deploy_service "vets-service"        "600s"
 
-# ------------------------
-# 3. DEPLOY PROD (image update)
-# ------------------------
-  deploy-prod-image:
-    needs: detect-changes
+          # Gateway (depends on business services being registered)
+          deploy_service "api-gateway"         "600s"
+
+          # GenAI last — slowest startup
+          deploy_service "genai-service"       "900s"
+
+          echo ""
+          echo "🎉 Controlled rollout complete — all services deployed to prod"
+
+  # ------------------------
+  # 3. VERIFY
+  # ------------------------
+  verify:
+    needs: deploy
     runs-on: [self-hosted, Linux, X64, k8s]
-    environment: prod
-
-    if: needs.detect-changes.outputs.deployment_changed == 'true'
+    if: always()
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy all services (image update)
-        if: github.event_name == 'push' || inputs.service == 'all'
+      - name: Setup kubeconfig
         run: |
-          IMAGE_TAG=${{ inputs.image_tag }}
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
 
-          kubectl apply -f k8s/ --exclude=*-deployment.yaml -n prod
-
-          for SVC in admin-server api-gateway config-server customers-service \
-                      discovery-server genai-service vets-service visits-service; do
-            kubectl set image deployment/${SVC} \
-              ${SVC}=ross1832/spring-petclinic-${SVC}:${IMAGE_TAG} -n prod
-          done
-
-          kubectl rollout status deployment -n prod --timeout=300s
-
-      - name: Deploy single service (image update)
-        if: github.event_name == 'workflow_dispatch' && inputs.service != 'all'
+      - name: Show prod status
         run: |
-          IMAGE_TAG=${{ inputs.image_tag }}
-          SHORT=$(echo "${{ inputs.service }}" | sed 's/spring-petclinic-//')
+          echo "=== Pods ==="
+          kubectl get pods -n prod
 
-          kubectl apply -f k8s/${SHORT}-deployment.yaml -n prod
-          kubectl set image deployment/${SHORT} \
-            ${SHORT}=ross1832/${{ inputs.service }}:${IMAGE_TAG} -n prod
-          kubectl rollout status deployment/${SHORT} -n prod --timeout=600s
+          echo ""
+          echo "=== Deployments with current images ==="
+          kubectl get deployments -n prod \
+            -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image
 
-
-# ------------------------
-# 4. DEPLOY PROD (config-only)
-# ------------------------
-  deploy-prod-config:
-    needs: detect-changes
-    runs-on: [self-hosted, Linux, X64, k8s]
-    environment: prod
-
-    if: |
-      needs.detect-changes.outputs.config_changed == 'true' &&
-      needs.detect-changes.outputs.deployment_changed == 'false'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Apply config changes (no image update)
+      - name: Deployment summary
+        if: success()
         run: |
-          kubectl apply -f k8s/ --exclude=*-deployment.yaml -n prod
-          kubectl rollout status deployment -n prod --timeout=600s
+          VERSION="${{ github.event.inputs.version }}"
+          SERVICE="${{ github.event.inputs.service }}"
 
-
-# ------------------------
-# 5. DEPLOY PROD (monitoring)
-# ------------------------
-#  deploy-prod-monitoring:
-#    needs: detect-changes
-#    runs-on: [self-hosted, Linux, X64, k8s]
-#    environment: prod
-#
-#    if: needs.detect-changes.outputs.monitoring_changed == 'true'
-
-#    steps:
-#      - uses: actions/checkout@v4
-
-#      - name: Deploy monitoring stack
-#        run: kubectl apply -R -f k8s/monitoring/ -n monitoring-prod
+          echo "======================================"
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "======================================"
+          echo "Version     : $VERSION"
+          echo "Service(s)  : $SERVICE"
+          echo "Deployed by : ${{ github.actor }}"
+          echo "Time (UTC)  : $(date -u +'%Y-%m-%d %H:%M:%S')"
+          echo "======================================"git a

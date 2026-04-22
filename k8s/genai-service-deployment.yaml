@@ -41,7 +41,7 @@ spec:
           
             # GROQ CONFIG
             - name: SPRING_AI_OPENAI_BASE_URL
-              value: https://api.groq.com/openai/v1
+              value: https://api.groq.com/openai
           
             - name: SPRING_AI_OPENAI_API_KEY
               valueFrom:

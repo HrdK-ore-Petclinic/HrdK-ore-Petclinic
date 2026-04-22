@@ -58,17 +58,14 @@ spec:
               mountPath: /etc/grafana
 
             - name: grafana-storage
-              mountPath: /var/lib/grafana
+              mountPath: /var/lib/grafana   # SQLite + Data
 
-            #  Datasource Provisioning
             - name: grafana-datasources
               mountPath: /etc/grafana/provisioning/datasources
 
-            #  Dashboard Provider
             - name: grafana-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
 
-            #  Dashboard JSON Files
             - name: grafana-dashboard-files
               mountPath: /var/lib/grafana/dashboards
 
@@ -77,8 +74,10 @@ spec:
           configMap:
             name: grafana-config
 
+        #  added PVC Longhorn
         - name: grafana-storage
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: grafana-pvc
 
         - name: grafana-datasources
           configMap:

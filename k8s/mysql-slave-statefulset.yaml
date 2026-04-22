@@ -15,9 +15,22 @@ spec:
     metadata:
       labels:
         app: mysql-slave
+        role: slave   # definition slave for Failover
     spec:
       nodeSelector:
         env: prod
+
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - mysql-master
+                      - mysql-slave
+              topologyKey: "kubernetes.io/hostname"
 
       containers:
         - name: mysql

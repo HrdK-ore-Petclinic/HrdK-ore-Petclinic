@@ -15,9 +15,22 @@ spec:
     metadata:
       labels:
         app: mysql-master
+        role: master   # HA for SQL
     spec:
       nodeSelector:
         env: prod
+
+      affinity: # for better pod distrebution
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - mysql-master
+                      - mysql-slave
+              topologyKey: "kubernetes.io/hostname"
 
       containers:
         - name: mysql

@@ -4,7 +4,8 @@ metadata:
   name: mysql-master-config
   namespace: prod
 data:
-  server-id.cnf: |
+  master.cnf: |
     [mysqld]
     server-id=1
     log_bin=mysql-bin
+    binlog_format=ROW

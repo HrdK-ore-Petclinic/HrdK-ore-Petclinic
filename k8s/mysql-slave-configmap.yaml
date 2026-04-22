@@ -4,6 +4,9 @@ metadata:
   name: mysql-slave-config
   namespace: prod
 data:
-  server-id.cnf: |
+  slave.cnf: |
     [mysqld]
     server-id=2
+    relay-log=relay-log
+    read_only=1
+    super_read_only=1

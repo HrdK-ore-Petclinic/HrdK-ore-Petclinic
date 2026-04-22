@@ -39,6 +39,10 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: docker
 
+            # HOPEFULY FIX AI
+            - name: SPRING_CONFIG_IMPORT
+              value: ""
+
             # REMOVE CONFIG SERVER
             - name: SPRING_CLOUD_CONFIG_ENABLED
               value: "false"

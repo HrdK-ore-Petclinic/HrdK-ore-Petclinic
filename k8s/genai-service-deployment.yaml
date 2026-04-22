@@ -28,6 +28,7 @@ spec:
                   matchLabels:
                     app: genai-service
                 topologyKey: "kubernetes.io/hostname"
+
       containers:
         - name: genai-service
           image: ross1832/spring-petclinic-genai-service:latest
@@ -37,6 +38,20 @@ spec:
               value: http://config-server:8888/
             - name: SPRING_PROFILES_ACTIVE
               value: docker
+          
+            # GROQ CONFIG
+            - name: SPRING_AI_OPENAI_BASE_URL
+              value: https://api.groq.com/openai/v1
+          
+            - name: SPRING_AI_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: groq-secret
+                  key: api-key
+          
+            - name: SPRING_AI_OPENAI_CHAT_MODEL
+              value: llama3-8b-8192
+
           ports:
             - containerPort: 8084
           resources:

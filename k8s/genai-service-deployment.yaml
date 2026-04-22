@@ -52,7 +52,8 @@ spec:
               port: 8084
             initialDelaySeconds: 120
             periodSeconds: 15
-            failureThreshold: 20
+            failureThreshold: 30
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /actuator/health

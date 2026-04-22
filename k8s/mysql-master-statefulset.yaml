@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: mysql-master
-        role: master   # HA for SQL
+        role: master   # definition master for Failover
     spec:
       nodeSelector:
         env: prod

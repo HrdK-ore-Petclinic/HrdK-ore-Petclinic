@@ -41,7 +41,7 @@ spec:
 
             # HOPEFULY FIX AI
             - name: SPRING_CONFIG_IMPORT
-              value: ""
+              value: "optional:configserver"
 
             # REMOVE CONFIG SERVER
             - name: SPRING_CLOUD_CONFIG_ENABLED

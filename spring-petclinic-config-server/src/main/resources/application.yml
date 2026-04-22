@@ -17,4 +17,11 @@ management:
         include: health,info,prometheus
   endpoint:
     prometheus:
-      enabled: true
+      enabled: false
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    config-server:
+      enabled: false

@@ -40,25 +40,25 @@ spec:
               value: docker
 
             # HOPEFULY FIX AI
-            - name: SPRING_CONFIG_IMPORT
-              value: "optional:configserver"
+           # - name: SPRING_CONFIG_IMPORT
+           #   value: "optional:configserver"
 
             # REMOVE CONFIG SERVER
-            - name: SPRING_CLOUD_CONFIG_ENABLED
-              value: "false"
+           # - name: SPRING_CLOUD_CONFIG_ENABLED
+           #   value: "false"
 
             # GROQ CONFIG
-            - name: SPRING_AI_OPENAI_BASE_URL
-              value: https://api.groq.com/openai
+           # - name: SPRING_AI_OPENAI_BASE_URL
+           #   value: https://api.groq.com/openai
 
-            - name: SPRING_AI_OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: groq-secret
-                  key: api-key
+           # - name: SPRING_AI_OPENAI_API_KEY
+           #   valueFrom:
+           #     secretKeyRef:
+           #       name: groq-secret
+           #       key: api-key
 
-            - name: SPRING_AI_OPENAI_CHAT_MODEL
-              value: llama3-8b-8192
+           # - name: SPRING_AI_OPENAI_CHAT_MODEL
+           #   value: llama3-8b-8192
 
           ports:
             - containerPort: 8084

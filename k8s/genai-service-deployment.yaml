@@ -38,17 +38,21 @@ spec:
               value: http://config-server:8888/
             - name: SPRING_PROFILES_ACTIVE
               value: docker
-          
+
+            # REMOVE CONFIG SERVER
+            - name: SPRING_CLOUD_CONFIG_ENABLED
+              value: "false"
+
             # GROQ CONFIG
             - name: SPRING_AI_OPENAI_BASE_URL
               value: https://api.groq.com/openai
-          
+
             - name: SPRING_AI_OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: groq-secret
                   key: api-key
-          
+
             - name: SPRING_AI_OPENAI_CHAT_MODEL
               value: llama3-8b-8192
 

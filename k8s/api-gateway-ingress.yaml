@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: nginx   # fixed
   rules:
-    - host: HrdK-ore-Petclinic.local
+    - host: hrdk-ore-petclinic.local
       http:
         paths:
           - path: /

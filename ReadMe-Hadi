@@ -1,0 +1,54 @@
+# 🐾 Pet Clinic DevOps Project (Kubernetes on Proxmox)
+
+##  Overview
+
+In this project demonstrates a complete **DevOps infrastructure and deployment pipeline** using modern cloud-native technologies.  
+The system runs a **Pet Clinic application** on a Kubernetes cluster built on top of virtual machines hosted in Proxmox.
+
+---
+
+##  Architecture
+
+The project is structured into 3 main layers:
+
+### 1. Infrastructure Layer
+- Proxmox VE (Virtualization platform)
+- Managed using Terraform
+
+### 2. Compute Layer
+- Ubuntu Server 22.04 Virtual Machines
+  - 1 Control Plane (Master Node)
+  - 1 Worker Node
+
+### 3. Kubernetes Layer
+- Namespaces:
+  - `dev` → Development environment
+  - `prod` → Production environment
+  - `database` → MySQL with persistent storage
+  - `monitoring` → Prometheus & Grafana
+
+---
+
+## Tech Stack
+
+| Category              | Tools Used |
+|----------------------|-----------|
+| Virtualization       | Proxmox VE |
+| Infrastructure as Code | Terraform |
+| Containerization     | Docker |
+| Orchestration        | Kubernetes (kubeadm) |
+| Networking           | Calico (CNI) |
+| Runtime              | containerd |
+| Monitoring           | Prometheus, Grafana |
+| Database             | MySQL |
+| Secrets Management   | Kubernetes Secrets / Vault |
+| Backup               | etcd snapshots, DB backups |
+
+---
+
+## Deployment Workflow
+
+### 1. Provision Infrastructure
+```bash
+terraform init
+terraform apply

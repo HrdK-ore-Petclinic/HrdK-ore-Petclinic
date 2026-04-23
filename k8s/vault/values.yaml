@@ -21,6 +21,13 @@ server:
 
       disable_mlock = true
 
+  dataStorage:
+    enabled: true
+    size: 5Gi
+    mountPath: "/vault/data"
+    storageClass: longhorn
+    accessMode: ReadWriteOnce
+
 ui:
   enabled: true
 

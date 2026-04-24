@@ -1,9 +1,3 @@
-variable "proxmox_api_token" {
-  description = "Proxmox API Token from Vault"
-  type        = string
-  sensitive   = true
-}
-
 variable "proxmox_node_name" {
   description = "Name des Proxmox-Nodes"
   type        = string

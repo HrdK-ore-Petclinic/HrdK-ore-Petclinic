@@ -1,3 +1,8 @@
+data "vault_kv_secret_v2" "proxmox" {
+  mount = "secret"
+  name  = "terraform/proxmox"
+}
+
 resource "proxmox_virtual_environment_vm" "control_plane" {
   vm_id         = 100
   name          = "k8s-control-plain"
@@ -5,7 +10,6 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   started       = true
   scsi_hardware = "virtio-scsi-single"
 
-  # ignore power state changes to prevent recreation of the VM when it is stopped manually
   lifecycle {
     ignore_changes = [
       started
@@ -13,7 +17,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   }
 
   cpu {
-    cores   = 2
+    cores   = 4
     sockets = 1
     type    = "host"
     units   = 1024
@@ -23,37 +27,37 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 
   memory {
     dedicated = 16384
-    floating  = 0
+    floating  = 16384
     shared    = 0
   }
 
   disk {
-    datastore_id = "local"
-    interface    = "ide2"
-    size         = 3
-    cache        = "none"
-    discard      = "ignore"
-    iothread     = false
-    backup       = true
-    replicate    = true
-    aio          = "io_uring"
-    ssd          = false
+    datastore_id      = "local"
+    interface         = "ide2"
+    size              = 3
+    cache             = "none"
+    discard           = "ignore"
+    iothread          = false
+    backup            = true
+    replicate         = true
+    aio               = "io_uring"
+    ssd               = false
     path_in_datastore = "iso/ubuntu-24.04.4-live-server-amd64.iso"
   }
 
   disk {
-    datastore_id = "local"
-    interface    = "scsi0"
-    size         = 100
-    file_format  = "qcow2"
-    cache        = "none"
-    discard      = "on"
-    iothread     = true
-    backup       = true
-    replicate    = true
-    aio          = "io_uring"
-    ssd          = false
-    path_in_datastore = "100/vm-100-disk-0.qcow2"
+    datastore_id      = "zpve-storage"
+    interface         = "scsi0"
+    size              = 250
+    file_format       = "raw"
+    cache             = "none"
+    discard           = "on"
+    iothread          = true
+    backup            = true
+    replicate         = true
+    aio               = "io_uring"
+    ssd               = true
+    path_in_datastore = "vm-100-disk-0"
   }
 
   network_device {
@@ -88,7 +92,7 @@ resource "proxmox_virtual_environment_vm" "worker_1" {
   }
 
   cpu {
-    cores   = 2
+    cores   = 4
     sockets = 1
     type    = "host"
     units   = 1024
@@ -97,24 +101,24 @@ resource "proxmox_virtual_environment_vm" "worker_1" {
   }
 
   memory {
-    dedicated = 8192
-    floating  = 0
+    dedicated = 16384
+    floating  = 16384
     shared    = 0
   }
 
   disk {
-    datastore_id = "local"
-    interface    = "scsi0"
-    size         = 60
-    file_format  = "qcow2"
-    cache        = "none"
-    discard      = "on"
-    iothread     = true
-    backup       = true
-    replicate    = true
-    aio          = "io_uring"
-    ssd          = false
-    path_in_datastore = "101/vm-101-disk-0.qcow2"
+    datastore_id      = "zpve-storage"
+    interface         = "scsi0"
+    size              = 200
+    file_format       = "raw"
+    cache             = "none"
+    discard           = "on"
+    iothread          = true
+    backup            = true
+    replicate         = true
+    aio               = "io_uring"
+    ssd               = true
+    path_in_datastore = "vm-101-disk-0"
   }
 
   network_device {
@@ -136,19 +140,20 @@ resource "proxmox_virtual_environment_vm" "worker_1" {
 }
 
 resource "proxmox_virtual_environment_vm" "worker_2" {
-  vm_id     = 102
-  name      = "k8s-worker-2"
-  node_name = var.proxmox_node_name
-  started   = true
+  vm_id         = 102
+  name          = "k8s-worker-2"
+  node_name     = var.proxmox_node_name
+  started       = true
+  scsi_hardware = "virtio-scsi-pci"
 
   lifecycle {
     ignore_changes = [
       started
     ]
   }
-  
+
   cpu {
-    cores   = 2
+    cores   = 4
     sockets = 1
     type    = "host"
     units   = 1024
@@ -157,36 +162,165 @@ resource "proxmox_virtual_environment_vm" "worker_2" {
   }
 
   memory {
-    dedicated = 8192
-    floating  = 0
+    dedicated = 16384
+    floating  = 16384
     shared    = 0
   }
 
   disk {
-    datastore_id = "local"
+    datastore_id = "zpve-storage"
     interface    = "scsi0"
-    size         = 40
-    file_format  = "qcow2"
+    size         = 200
+    file_format  = "raw"
     cache        = "writeback"
     discard      = "ignore"
     iothread     = false
     backup       = true
     replicate    = true
     aio          = "io_uring"
-    ssd          = false
+    ssd          = true
   }
 
   network_device {
-    bridge      = var.vm_bridge
-    model       = "virtio"
-    firewall    = true
-    enabled     = true
+    bridge       = var.vm_bridge
+    model        = "virtio"
+    firewall     = true
+    enabled      = true
     disconnected = false
-    mtu         = 0
-    queues      = 0
-    rate_limit  = 0
-    vlan_id     = 0
-    mac_address = "BC:24:11:EC:B9:6F"
+    mtu          = 0
+    queues       = 0
+    rate_limit   = 0
+    vlan_id      = 0
+    mac_address  = "BC:24:11:EC:B9:6F"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+}
+
+resource "proxmox_virtual_environment_vm" "worker_3" {
+  vm_id         = 103
+  name          = "k8s-worker-3"
+  node_name     = var.proxmox_node_name
+  started       = true
+  scsi_hardware = "virtio-scsi-single"
+
+  lifecycle {
+    ignore_changes = [
+      started,
+      keyboard_layout,
+      migrate,
+      on_boot,
+      reboot,
+      reboot_after_update,
+      stop_on_destroy,
+      timeout_clone,
+      timeout_create,
+      timeout_migrate,
+      timeout_reboot,
+      timeout_shutdown_vm,
+      timeout_start_vm,
+      timeout_stop_vm,
+      timeout_move_disk
+    ]
+  }
+
+  cpu {
+    cores   = 4
+    sockets = 1
+    type    = "host"
+    units   = 1024
+    numa    = false
+    limit   = 0
+  }
+
+  memory {
+    dedicated = 16384
+    floating  = 16384
+    shared    = 0
+  }
+
+  disk {
+    datastore_id = "zpve-storage"
+    interface    = "scsi0"
+    size         = 100
+    file_format  = "raw"
+    cache        = "none"
+    discard      = "on"
+    iothread     = true
+    backup       = true
+    replicate    = true
+    aio          = "io_uring"
+    ssd          = true
+  }
+
+  network_device {
+    bridge       = var.vm_bridge
+    model        = "virtio"
+    firewall     = true
+    enabled      = true
+    disconnected = false
+    mtu          = 0
+    queues       = 0
+    rate_limit   = 0
+    vlan_id      = 0
+    mac_address  = "BC:24:11:2F:A3:5D"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+}
+resource "proxmox_virtual_environment_vm" "ubuntu_template" {
+  vm_id         = 200
+  name          = "k8sNode-template-ubuntu"
+  node_name     = var.proxmox_node_name
+  template      = true
+  started       = false
+  scsi_hardware = "virtio-scsi-single"
+
+  lifecycle {
+    ignore_changes = [
+      started,
+      keyboard_layout,
+      migrate,
+      on_boot,
+      reboot,
+      reboot_after_update,
+      stop_on_destroy,
+      timeout_clone,
+      timeout_create,
+      timeout_migrate,
+      timeout_reboot,
+      timeout_shutdown_vm,
+      timeout_start_vm,
+      timeout_stop_vm,
+      timeout_move_disk
+    ]
+  }
+
+  cpu {
+    cores   = 2
+    sockets = 1
+    type    = "host"
+  }
+
+  memory {
+    dedicated = 16384
+  }
+
+  network_device {
+    bridge       = var.vm_bridge
+    model        = "virtio"
+    firewall     = true
+    enabled      = true
+    disconnected = false
+    mtu          = 0
+    queues       = 0
+    rate_limit   = 0
+    vlan_id      = 0
+    mac_address  = "BC:24:11:DD:CB:B7"
   }
 
   operating_system {

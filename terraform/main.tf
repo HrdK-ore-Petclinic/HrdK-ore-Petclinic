@@ -200,11 +200,11 @@ resource "proxmox_virtual_environment_vm" "worker_2" {
 }
 
 resource "proxmox_virtual_environment_vm" "worker_3" {
-  vm_id               = 103
-  name                = "k8s-worker-3"
-  node_name           = var.proxmox_node_name
-  started             = true
-  scsi_hardware       = "virtio-scsi-single"
+  vm_id         = 103
+  name          = "k8s-worker-3"
+  node_name     = var.proxmox_node_name
+  started       = true
+  scsi_hardware = "virtio-scsi-single"
 
   lifecycle {
     ignore_changes = [
@@ -266,6 +266,61 @@ resource "proxmox_virtual_environment_vm" "worker_3" {
     rate_limit   = 0
     vlan_id      = 0
     mac_address  = "BC:24:11:2F:A3:5D"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+}
+resource "proxmox_virtual_environment_vm" "ubuntu_template" {
+  vm_id         = 200
+  name          = "k8sNode-template-ubuntu"
+  node_name     = var.proxmox_node_name
+  template      = true
+  started       = false
+  scsi_hardware = "virtio-scsi-single"
+
+  lifecycle {
+    ignore_changes = [
+      started,
+      keyboard_layout,
+      migrate,
+      on_boot,
+      reboot,
+      reboot_after_update,
+      stop_on_destroy,
+      timeout_clone,
+      timeout_create,
+      timeout_migrate,
+      timeout_reboot,
+      timeout_shutdown_vm,
+      timeout_start_vm,
+      timeout_stop_vm,
+      timeout_move_disk
+    ]
+  }
+
+  cpu {
+    cores   = 2
+    sockets = 1
+    type    = "host"
+  }
+
+  memory {
+    dedicated = 16384
+  }
+
+  network_device {
+    bridge       = var.vm_bridge
+    model        = "virtio"
+    firewall     = true
+    enabled      = true
+    disconnected = false
+    mtu          = 0
+    queues       = 0
+    rate_limit   = 0
+    vlan_id      = 0
+    mac_address  = "BC:24:11:DD:CB:B7"
   }
 
   operating_system {

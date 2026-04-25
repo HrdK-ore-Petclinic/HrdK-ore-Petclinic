@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: mysql-slave
-        role: slave   # definition slave for Failover
+        role: slave
     spec:
       nodeSelector:
         env: prod
@@ -42,6 +42,7 @@ spec:
                 secretKeyRef:
                   name: mysql-secret
                   key: MYSQL_ROOT_PASSWORD
+
             - name: MYSQL_DATABASE
               valueFrom:
                 secretKeyRef:

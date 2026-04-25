@@ -5,7 +5,7 @@ metadata:
   namespace: prod
 spec:
   selector:
-    app: mysql
+    app: mysql-master
   ports:
     - port: 3306
       targetPort: 3306

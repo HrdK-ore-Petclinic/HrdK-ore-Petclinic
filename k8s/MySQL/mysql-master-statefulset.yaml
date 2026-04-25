@@ -15,12 +15,12 @@ spec:
     metadata:
       labels:
         app: mysql-master
-        role: master   # definition master for Failover
+        role: master   # important for service routing
     spec:
       nodeSelector:
         env: prod
 
-      affinity: # for better pod distrebution
+      affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
@@ -42,6 +42,19 @@ spec:
                 secretKeyRef:
                   name: mysql-secret
                   key: MYSQL_ROOT_PASSWORD
+
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+
             - name: MYSQL_DATABASE
               valueFrom:
                 secretKeyRef:

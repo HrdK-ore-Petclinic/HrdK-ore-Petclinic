@@ -38,11 +38,17 @@ spec:
             - name: SPRING_PROFILES_ACTIVE
               value: docker,mysql
             - name: SPRING_DATASOURCE_URL
-              value: jdbc:mysql://mysql-master:3306/petclinic?allowPublicKeyRetrieval=true&useSSL=false
+              value: jdbc:mysql://mysql:3306/petclinic?allowPublicKeyRetrieval=true&useSSL=false
             - name: SPRING_DATASOURCE_USERNAME
-              value: root
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
             - name: SPRING_DATASOURCE_PASSWORD
-              value: petclinic
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
           ports:
             - containerPort: 8083
           resources:
